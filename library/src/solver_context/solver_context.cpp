@@ -384,10 +384,19 @@ auto SolverContext::MoveGenContext::init(
   const int initialSuits[],
   const unsigned short rank_in_suit[DDS_HANDS][DDS_SUITS],
   const int trump,
-  const int leadHand) -> void
+  const int leadHand,
+  const bool trumpBreakRuleOn,
+  const bool trumpAlreadyBroken) -> void
 {
   thr_->moves.Init(tricks, relStartHand, initialRanks, initialSuits,
-                   rank_in_suit, trump, leadHand);
+                   rank_in_suit, trump, leadHand,
+                   trumpBreakRuleOn, trumpAlreadyBroken);
+}
+
+auto SolverContext::MoveGenContext::trump_broken(
+  const int tricks) const -> bool
+{
+  return thr_->moves.TrumpBroken(tricks);
 }
 
 auto SolverContext::MoveGenContext::print_trick_stats(std::ofstream& fout) const -> void

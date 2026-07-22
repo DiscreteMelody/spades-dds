@@ -178,6 +178,19 @@ struct FutureTricks
  * @param currentTrickSuit Suits of cards played in the current trick
  * @param currentTrickRank Ranks of cards played in the current trick
  * @param remainCards Remaining cards in each hand and suit
+ * @param enforceTrumpBreak Opt-in house rule (as used in Spades): the trump
+ *        suit may not be led until it has been broken, unless the hand on
+ *        lead holds nothing but trump. 0 = classic bridge behaviour
+ *        (default, no restriction). Non-zero = enforce the rule. Has no
+ *        effect when trump == DDS_NOTRUMP. Existing callers that do not set
+ *        this field (e.g. structs built against an older header, left
+ *        zero-initialized) get exactly the historical, unrestricted
+ *        behaviour.
+ * @param trumpAlreadyBroken Only consulted when enforceTrumpBreak is
+ *        non-zero: whether the trump suit has already been broken (led, or
+ *        discarded/ruffed) at some point before the position being solved
+ *        here. 0 = not yet broken, non-zero = already broken. Ignored when
+ *        enforceTrumpBreak is 0.
  */
 struct Deal
 {
@@ -186,6 +199,8 @@ struct Deal
   int currentTrickSuit[3];
   int currentTrickRank[3];
   unsigned int remainCards[DDS_HANDS][DDS_SUITS];
+  int enforceTrumpBreak;
+  int trumpAlreadyBroken;
 };
 
 

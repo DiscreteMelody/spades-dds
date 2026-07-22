@@ -197,6 +197,20 @@ static bool ab_search_0_ctx(
   int hand = posPoint->first[depth];
   int tricks = depth >> 2;
 
+  // "Trump must be broken to lead" house rule: a transposition-table
+  // entry for this node encodes "what is achievable with `hand` on lead
+  // here", which depends on whether trump can legally be led - i.e. on
+  // whether trump has already been broken. Two positions with identical
+  // remaining cards but different trumpBroken status are not equivalent
+  // under the rule, so lookups/stores are only safe once trump is
+  // already broken (a monotonic, permanent state from then on, so this
+  // stays safe for the rest of the search below this node). When the
+  // rule is off, or trump == DDS_NOTRUMP, this is always true and there
+  // is no behavior change whatsoever.
+  const bool ttUsable = !thrp->trumpBreakRuleOn ||
+    trump == DDS_NOTRUMP ||
+    ctx.move_gen().trump_broken(tricks);
+
 #ifdef DDS_TOP_LEVEL
   ctx.search().nodes()++;
 #endif
@@ -204,7 +218,7 @@ static bool ab_search_0_ctx(
   for (int ss = 0; ss < DDS_SUITS; ss++)
     posPoint->win_ranks[depth][ss] = 0;
 
-  if (depth >= 20)
+  if (depth >= 20 && ttUsable)
   {
     /* Find node that fits the suit lengths */
     int limit;
@@ -271,6 +285,16 @@ static bool ab_search_0_ctx(
     return value;
   }
 
+  // QuickTricks/LaterTricksMIN/LaterTricksMAX estimate achievable tricks
+  // without going through Moves::MoveGen0, so - like the transposition
+  // table above - they know nothing about the trump-must-be-broken-to-
+  // lead house rule and could overestimate what is achievable by
+  // assuming an unbroken trump suit can be freely led. Skip them in
+  // that regime and fall through to the exact, move-generation-based
+  // search below instead: strictly safe (only costs some performance
+  // while trump is unbroken), never wrong.
+  if (ttUsable)
+  {
   bool res;
   TIMER_START(TIMER_NO_QT, depth);
   int qtricks = QuickTricks(* posPoint, hand, depth, target,
@@ -313,8 +337,9 @@ static bool ab_search_0_ctx(
       return true;
     }
   }
+  }
 
-  if (depth < 20)
+  if (depth < 20 && ttUsable)
   {
     /* Find node that fits the suit lengths */
     int limit;
@@ -459,13 +484,16 @@ ABexit:
     ? true : false;
 
   TIMER_START(TIMER_NO_BUILD, depth);
-  ctx.trans_table()->add(
-    tricks,
-    hand,
-    posPoint->aggr,
-    posPoint->win_ranks[depth],
-    first,
-    flag);
+  if (ttUsable)
+  {
+    ctx.trans_table()->add(
+      tricks,
+      hand,
+      posPoint->aggr,
+      posPoint->win_ranks[depth],
+      first,
+      flag);
+  }
   TIMER_END(TIMER_NO_BUILD, depth);
 
 #ifdef DDS_AB_HITS

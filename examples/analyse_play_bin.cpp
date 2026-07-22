@@ -22,7 +22,7 @@ extern unsigned char card_suit_chars_[5], card_rank_chars_[16];
 
 auto main() -> int
 {
-  Deal dl;
+  Deal dl{};
   PlayTraceBin DDplay;
   SolvedPlay solved;
 
