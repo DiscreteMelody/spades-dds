@@ -256,7 +256,7 @@ int STDCALL AnalysePlayPBN(
   SolvedPlay * solvedp,
   int thrId)
 {
-  Deal dl{};
+  Deal dl;
   PlayTraceBin play;
 
   if (convert_from_pbn(dlPBN.remainCards, dl.remainCards) !=

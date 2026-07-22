@@ -395,17 +395,7 @@ public:
       const int initialSuits[],
       const unsigned short rank_in_suit[DDS_HANDS][DDS_SUITS],
       const int trump,
-      const int leadHand,
-      const bool trumpBreakRuleOn = false,
-      const bool trumpAlreadyBroken = false) -> void;
-
-    // Whether trump has been broken as of the given trick. Only meaningful
-    // when the trump-must-be-broken-to-lead house rule is active; false
-    // (harmless) otherwise. Used to gate transposition-table reuse, since
-    // a cached leader-node result is only valid for reuse across two
-    // positions when they share the same trump-broken status.
-    auto trump_broken(
-      const int tricks) const -> bool;
+      const int leadHand) -> void;
 
   // Diagnostics (no behavior change; passthrough to Moves)
   // Note: Emission is controlled by DDS_MOVES / DDS_MOVES_DETAILS.

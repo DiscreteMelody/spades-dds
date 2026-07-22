@@ -140,15 +140,11 @@ auto solve_board_internal(
   if (dl.trump != thrp->trump)
     newTrump = true;
 
-  if ((dl.enforceTrumpBreak != 0) != thrp->trumpBreakRuleOn)
-    newTrump = true;
-
   // ----------------------------------------------------------
   // Generic initialization.
   // ----------------------------------------------------------
 
   thrp->trump = dl.trump;
-  thrp->trumpBreakRuleOn = (dl.enforceTrumpBreak != 0);
   ctx.search().ini_depth() = cardCount - 4;
   int ini_depth = ctx.search().ini_depth();
   int trick = (ini_depth + 3) >> 2;
@@ -257,9 +253,7 @@ auto solve_board_internal(
       dl.currentTrickSuit,
       thrp->lookAheadPos.rank_in_suit,
       thrp->trump,
-      thrp->lookAheadPos.first[ini_depth],
-      thrp->trumpBreakRuleOn,
-      (dl.trumpAlreadyBroken != 0));
+      thrp->lookAheadPos.first[ini_depth]);
 
     if (k == 0)
     {
@@ -300,9 +294,7 @@ auto solve_board_internal(
     dl.currentTrickSuit,
     thrp->lookAheadPos.rank_in_suit,
     thrp->trump,
-    thrp->lookAheadPos.first[ini_depth],
-    thrp->trumpBreakRuleOn,
-    (dl.trumpAlreadyBroken != 0));
+    thrp->lookAheadPos.first[ini_depth]);
 
   if (hand_rel_first == 0)
   {

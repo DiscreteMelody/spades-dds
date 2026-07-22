@@ -134,7 +134,7 @@ int STDCALL SolveBoardPBN(
   FutureTricks * futp, 
   int thrId)
 {
-  Deal dl{};
+  Deal dl;
   if (convert_from_pbn(dlpbn.remainCards, dl.remainCards) != RETURN_NO_FAULT)
     return RETURN_PBN_FAULT;
 

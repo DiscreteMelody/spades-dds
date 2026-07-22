@@ -94,13 +94,6 @@ public:
   int currTrick;
   /** @brief Trump suit or DDS_NOTRUMP. */
   int trump;
-
-  /**
-   * @brief Whether the "trump must be broken to lead" house rule (as used
-   * in Spades) is active for this solve. False reproduces classic,
-   * unrestricted bridge behaviour exactly. Set once via Init().
-   */
-  bool trumpBreakRuleOn = false;
   /** @brief Suit currently being generated. */
   int suit;
   /** @brief Number of moves currently generated. */
@@ -262,33 +255,11 @@ public:
      * @param rank_in_suit Rank bitmaps by hand/suit
      * @param our_trump Trump suit
      * @param our_lead_hand Absolute lead hand
-     * @param our_trump_break_rule_on Opt-in "trump must be broken to lead"
-     *        house rule (Spades). Defaults to false so existing callers
-     *        are unaffected.
-     * @param trump_already_broken Whether trump has already been broken
-     *        prior to this position (ignored unless the rule is on).
      */
     auto Init(const int tricks, const int relStartHand, const int initialRanks[],
         const int initialSuits[],
         const unsigned short rank_in_suit[DDS_HANDS][DDS_SUITS],
-        const int our_trump, const int our_lead_hand,
-        const bool our_trump_break_rule_on = false,
-        const bool trump_already_broken = false) -> void;
-
-    /**
-     * @brief Read whether trump has been broken as of the given trick.
-     *
-     * Only meaningful when the trump-break house rule is active; harmless
-     * (always false) otherwise.
-     *
-     * @param tricks Current trick index
-     * @return True if a trump card has been played to a non-trump-led
-     *         trick at or before this trick.
-     */
-    auto TrumpBroken(const int tricks) const -> bool
-    {
-      return track[tricks].trumpBroken;
-    }
+        const int our_trump, const int our_lead_hand) -> void;
 
     /**
      * @brief Reset tracking state for a new lead hand.

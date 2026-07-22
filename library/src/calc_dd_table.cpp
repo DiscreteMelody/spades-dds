@@ -26,7 +26,7 @@ auto calc_dd_table(
     const DdTableDeal& table_deal,
     DdTableResults* table_results) -> int
 {
-    Deal dl{};
+    Deal dl;
     Boards bo;
     SolvedBoards solved;
 

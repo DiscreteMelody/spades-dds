@@ -17,13 +17,6 @@ struct TrackType
   int high[DDS_HANDS];
   int lowest_win[DDS_HANDS][DDS_SUITS];
   int removed_ranks[DDS_SUITS];
-
-  /// Whether the trump suit has been broken (played to a trick it did not
-  /// lead) at any point up to and including this trick. Monotonic: once
-  /// true it is carried forward unchanged for all later tricks, the same
-  /// way removed_ranks accumulates. Only meaningful when the trump-break
-  /// house rule is active; otherwise unused.
-  bool trumpBroken = false;
 };
 
 /// @brief Context information for heuristic move sorting and weighting.

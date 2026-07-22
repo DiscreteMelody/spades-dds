@@ -189,7 +189,7 @@ int STDCALL CalcDDtableN(
   DdTableResults * tablep,
   int maxThreads)
 {
-  Deal dl{};
+  Deal dl;
   Boards bo;
   SolvedBoards solved;
 

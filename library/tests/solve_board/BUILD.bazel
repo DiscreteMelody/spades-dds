@@ -29,16 +29,3 @@ cc_test(
     ],
     copts = DDS_CPPOPTS,
 )
-
-cc_test(
-    name = "trump_break_rule_test",
-    size = "small",
-    srcs = [
-        "trump_break_rule_test.cpp",
-    ],
-    deps = [
-        "//library/src:testable_dds",
-        "@googletest//:gtest_main",
-    ],
-    copts = DDS_CPPOPTS,
-)

@@ -109,13 +109,9 @@ Moves::~Moves() {}
 auto Moves::Init(const int tricks, const int relStartHand,
                  const int initialRanks[], const int initialSuits[],
                  const unsigned short rank_in_suit[DDS_HANDS][DDS_SUITS],
-                 const int our_trump, const int our_lead_hand,
-                 const bool our_trump_break_rule_on,
-                 const bool trump_already_broken) -> void {
+                 const int our_trump, const int our_lead_hand) -> void {
   currTrick = tricks;
   trump = our_trump;
-  trumpBreakRuleOn = our_trump_break_rule_on;
-  track[tricks].trumpBroken = trump_already_broken;
 
   if (relStartHand == 0)
     track[tricks].lead_hand = our_lead_hand;
@@ -177,30 +173,9 @@ auto Moves::MoveGen0(const int tricks, const Pos &tpos,
     trackp->lowest_win[0][s] = 0;
   numMoves = 0;
 
-  // "Trump must be broken to lead" house rule (e.g. Spades): once active,
-  // the trump suit is not a legal opening-lead candidate until it has been
-  // broken, unless the leader holds nothing else. Off by default, and a
-  // no-op whenever trump == DDS_NOTRUMP, so classic bridge solves are
-  // completely unaffected.
-  const bool trumpLeadRestricted =
-      trumpBreakRuleOn && (trump != DDS_NOTRUMP) && (!trackp->trumpBroken);
-
-  bool leadHandHasNonTrumpCard = false;
-  if (trumpLeadRestricted) {
-    for (int s = 0; s < DDS_SUITS; s++) {
-      if (s != trump && tpos.rank_in_suit[leadHand][s] != 0) {
-        leadHandHasNonTrumpCard = true;
-        break;
-      }
-    }
-  }
-
   for (suit = 0; suit < DDS_SUITS; suit++) {
     unsigned short ris = tpos.rank_in_suit[leadHand][suit];
     if (ris == 0)
-      continue;
-
-    if (trumpLeadRestricted && suit == trump && leadHandHasNonTrumpCard)
       continue;
 
     lastNumMoves = numMoves;
@@ -446,20 +421,6 @@ auto Moves::MakeSpecific(const MoveType &ourMply, const int trick,
       s = trackp->play_suits[h];
       newp->removed_ranks[s] |= bit_map_rank[r];
     }
-
-    // "Trump must be broken to lead" house rule: once any trump card has
-    // been played to a trick (led, or discarded/ruffed), trump stays
-    // broken for every later trick. Carry the flag forward the same way
-    // removed_ranks is carried forward above. A no-op for NT deals, since
-    // no suit index ever equals DDS_NOTRUMP.
-    bool trumpPlayedThisTrick = false;
-    for (int h = 0; h < DDS_HANDS; h++) {
-      if (trackp->play_suits[h] == trump) {
-        trumpPlayedThisTrick = true;
-        break;
-      }
-    }
-    newp->trumpBroken = trackp->trumpBroken || trumpPlayedThisTrick;
   }
 }
 
@@ -551,18 +512,6 @@ auto Moves::MakeNext(const int trick, const int relHand,
       s = trackp->play_suits[h];
       newt.removed_ranks[s] |= bit_map_rank[r];
     }
-
-    // "Trump must be broken to lead" house rule: carry the broken flag
-    // forward once any trump card has been played this trick (led, or
-    // discarded/ruffed). See MakeSpecific for the identical logic.
-    bool trumpPlayedThisTrick = false;
-    for (int h = 0; h < DDS_HANDS; h++) {
-      if (trackp->play_suits[h] == trump) {
-        trumpPlayedThisTrick = true;
-        break;
-      }
-    }
-    newt.trumpBroken = trackp->trumpBroken || trumpPlayedThisTrick;
   }
 
   list.current++;
@@ -613,20 +562,6 @@ auto Moves::MakeNextSimple(const int trick, const int relHand)
 
   if (relHand == 3) {
     track[trick - 1].lead_hand = (trackp->lead_hand + trackp->high[3]) % 4;
-
-    // "Trump must be broken to lead" house rule: carry the broken flag
-    // forward once any trump card has been played this trick. This path
-    // is also used to replay a current trick already supplied by the
-    // caller, so a trump card already present there correctly breaks
-    // trump for later tricks too. See MakeSpecific for identical logic.
-    bool trumpPlayedThisTrick = false;
-    for (int h = 0; h < DDS_HANDS; h++) {
-      if (trackp->play_suits[h] == trump) {
-        trumpPlayedThisTrick = true;
-        break;
-      }
-    }
-    track[trick - 1].trumpBroken = trackp->trumpBroken || trumpPlayedThisTrick;
   }
 
   list.current++;
