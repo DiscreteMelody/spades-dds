@@ -105,6 +105,12 @@
     <ClCompile Include="..\library\src\solve_board.cpp">
       <Filter>library\src</Filter>
     </ClCompile>
+    <ClCompile Include="..\library\src\system\deal_fanout.cpp">
+      <Filter>library\src\system</Filter>
+    </ClCompile>
+    <ClCompile Include="..\library\src\system\file.cpp">
+      <Filter>library\src\system</Filter>
+    </ClCompile>
     <ClCompile Include="..\library\src\system\memory.cpp">
       <Filter>library\src\system</Filter>
     </ClCompile>
@@ -229,6 +235,12 @@
     </ClInclude>
     <ClInclude Include="..\library\src\solve_board.hpp">
       <Filter>library\src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\library\src\system\deal_fanout.hpp">
+      <Filter>library\src\system</Filter>
+    </ClInclude>
+    <ClInclude Include="..\library\src\system\file.hpp">
+      <Filter>library\src\system</Filter>
     </ClInclude>
     <ClInclude Include="..\library\src\system\memory.hpp">
       <Filter>library\src\system</Filter>

@@ -256,7 +256,7 @@ int STDCALL AnalysePlayPBN(
   SolvedPlay * solvedp,
   int thrId)
 {
-  Deal dl;
+  Deal dl{};
   PlayTraceBin play;
 
   if (convert_from_pbn(dlPBN.remainCards, dl.remainCards) !=
@@ -265,6 +265,8 @@ int STDCALL AnalysePlayPBN(
 
   dl.first = dlPBN.first;
   dl.trump = dlPBN.trump;
+  dl.enforceTrumpBreak = dlPBN.enforceTrumpBreak;
+  dl.trumpAlreadyBroken = dlPBN.trumpAlreadyBroken;
   for (int i = 0; i <= 2; i++)
   {
     dl.currentTrickSuit[i] = dlPBN.currentTrickSuit[i];

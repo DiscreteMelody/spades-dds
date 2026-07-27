@@ -50,6 +50,11 @@ struct ThreadData
   unsigned short int suit[DDS_HANDS][DDS_SUITS];
   int trump;
 
+  // Opt-in "trump must be broken to lead" house rule (e.g. Spades).
+  // False reproduces classic, unrestricted bridge behaviour exactly.
+  // Set from Deal::enforceTrumpBreak at the start of solve_board_internal().
+  bool trumpBreakRuleOn = false;
+
   Pos lookAheadPos; // Recursive alpha-beta data
   bool analysisFlag;
   unsigned short int lowestWin[50][DDS_SUITS];

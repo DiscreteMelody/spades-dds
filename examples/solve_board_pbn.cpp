@@ -20,7 +20,7 @@
 
 auto main() -> int
 {
-  DealPBN dlPBN;
+  DealPBN dlPBN{};
   FutureTricks fut2, // solutions == 2
                 fut3; // solutions == 3
 

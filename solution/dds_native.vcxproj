@@ -85,6 +85,8 @@
     <ClCompile Include="..\library\src\solver_context_adapter.cpp" />
     <ClCompile Include="..\library\src\solver_if.cpp" />
     <ClCompile Include="..\library\src\solve_board.cpp" />
+    <ClCompile Include="..\library\src\system\deal_fanout.cpp" />
+    <ClCompile Include="..\library\src\system\file.cpp" />
     <ClCompile Include="..\library\src\system\memory.cpp" />
     <ClCompile Include="..\library\src\system\parallel_boards.cpp" />
     <ClCompile Include="..\library\src\system\scheduler.cpp" />
@@ -128,6 +130,8 @@
     <ClInclude Include="..\library\src\solver_context\solver_context.hpp" />
     <ClInclude Include="..\library\src\solver_if.hpp" />
     <ClInclude Include="..\library\src\solve_board.hpp" />
+    <ClInclude Include="..\library\src\system\deal_fanout.hpp" />
+    <ClInclude Include="..\library\src\system\file.hpp" />
     <ClInclude Include="..\library\src\system\memory.hpp" />
     <ClInclude Include="..\library\src\system\parallel_boards.hpp" />
     <ClInclude Include="..\library\src\system\scheduler.hpp" />

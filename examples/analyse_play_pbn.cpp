@@ -20,7 +20,7 @@
 
 auto main() -> int
 {
-  DealPBN dlPBN;
+  DealPBN dlPBN{};
   PlayTracePBN DDplayPBN;
   SolvedPlay solved;
 

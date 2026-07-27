@@ -134,7 +134,7 @@ int STDCALL SolveBoardPBN(
   FutureTricks * futp, 
   int thrId)
 {
-  Deal dl;
+  Deal dl{};
   if (convert_from_pbn(dlpbn.remainCards, dl.remainCards) != RETURN_NO_FAULT)
     return RETURN_PBN_FAULT;
 
@@ -145,6 +145,8 @@ int STDCALL SolveBoardPBN(
   }
   dl.first = dlpbn.first;
   dl.trump = dlpbn.trump;
+  dl.enforceTrumpBreak = dlpbn.enforceTrumpBreak;
+  dl.trumpAlreadyBroken = dlpbn.trumpAlreadyBroken;
 
   int res = SolveBoard(dl, target, solutions, mode, futp, thrId);
   return res;
