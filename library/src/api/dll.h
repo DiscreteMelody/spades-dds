@@ -191,6 +191,20 @@ struct FutureTricks
  *        discarded/ruffed) at some point before the position being solved
  *        here. 0 = not yet broken, non-zero = already broken. Ignored when
  *        enforceTrumpBreak is 0.
+ * @param misere Opt-in "minimum tricks" mode: solve for the fewest tricks
+ *        the side of `first` can be held to, if BOTH sides play to minimize
+ *        the tricks THEY take (the misère/nullo mirror of the classic
+ *        maximum-tricks problem - not simply 13 minus the normal result,
+ *        since both sides' policies invert, not just how the final number
+ *        is read). 0 = classic maximum-tricks behaviour (default). Non-zero
+ *        = misère. Existing callers that do not set this field (e.g.
+ *        structs built against an older header, left zero-initialized) get
+ *        exactly the historical maximum-tricks behaviour. Because several
+ *        performance heuristics (the transposition table, QuickTricks,
+ *        LaterTricksMIN/MAX) assume the classic maximize-your-own-tricks
+ *        objective, they are bypassed while this is set - the position is
+ *        solved exactly, just without those speedups, so misère solves are
+ *        expected to be slower than an equivalent maximum-tricks solve.
  */
 struct Deal
 {
@@ -201,6 +215,7 @@ struct Deal
   unsigned int remainCards[DDS_HANDS][DDS_SUITS];
   int enforceTrumpBreak;
   int trumpAlreadyBroken;
+  int misere;
 };
 
 
@@ -218,6 +233,9 @@ struct Deal
  * @param trumpAlreadyBroken Same meaning as Deal::trumpAlreadyBroken:
  *        whether trump has already been broken before this position.
  *        Ignored unless enforceTrumpBreak is non-zero.
+ * @param misere Same meaning as Deal::misere: opt-in "minimum tricks"
+ *        (misère) mode. 0 (default) reproduces classic maximum-tricks
+ *        behaviour exactly.
  */
 struct DealPBN
 {
@@ -228,6 +246,7 @@ struct DealPBN
   char remainCards[80];
   int enforceTrumpBreak;
   int trumpAlreadyBroken;
+  int misere;
 };
 
 

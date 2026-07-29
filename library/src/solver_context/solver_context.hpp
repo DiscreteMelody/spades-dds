@@ -264,9 +264,21 @@ public:
     auto best_move_tt(int depth) const -> const MoveType& { return thr_->bestMoveTT[depth]; }
     auto winners(int trickIndex) -> WinnersType& { return thr_->winners[trickIndex]; }
     auto winners(int trickIndex) const -> const WinnersType& { return thr_->winners[trickIndex]; }
-    // Node type store for each hand (MAXNODE/MINNODE)
+    // Node type store for each hand (MAXNODE/MINNODE). This is a *policy*
+    // label - it says whether this hand's decision nodes pick "up" or
+    // "down" - and misère mode inverts it (see solve_board_internal()).
     auto node_type_store(int hand) -> int& { return thr_->nodeTypeStore[hand]; }
     auto node_type_store(int hand) const -> const int& { return thr_->nodeTypeStore[hand]; }
+    // Fixed reference-side membership check used for trick SCORING
+    // (Pos::tricks_max), independent of node_type_store's policy labels.
+    // In a vanilla (non-misère) solve this always agrees with
+    // "node_type_store(hand) == MAXNODE", because the reference side is
+    // always the one assigned MAXNODE there. In misère mode the policy
+    // labels invert (reference becomes MINNODE, the other side becomes
+    // MAXNODE) but tricks_max still needs to count the reference side's
+    // own tricks, so scoring is decoupled from policy via this accessor
+    // instead of continuing to key off node_type_store.
+    auto is_reference_hand(int hand) const -> bool { return (hand & 1) == thr_->scoreParity; }
     // Access to forbidden moves buffer used by Moves::Purge and solver loops
     auto forbidden_moves() -> MoveType* { return thr_->forbiddenMoves; }
     auto forbidden_moves() const -> const MoveType* { return thr_->forbiddenMoves; }

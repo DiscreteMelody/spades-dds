@@ -207,9 +207,20 @@ static bool ab_search_0_ctx(
   // stays safe for the rest of the search below this node). When the
   // rule is off, or trump == DDS_NOTRUMP, this is always true and there
   // is no behavior change whatsoever.
-  const bool ttUsable = !thrp->trumpBreakRuleOn ||
-    trump == DDS_NOTRUMP ||
-    ctx.move_gen().trump_broken(tricks);
+  //
+  // Misère mode: the transposition table and the QuickTricks/
+  // LaterTricksMIN/LaterTricksMAX heuristics below all assume the classic
+  // maximize-your-own-tricks objective (they reason about "certain
+  // winners", which has no direct misère analogue without separately
+  // re-deriving each heuristic's math for a minimize-your-own-tricks
+  // objective). Rather than risk a wrong cutoff from an unreviewed
+  // heuristic, misère solves skip all of it and fall through to the same
+  // exact, move-generation-based search used below when trump is
+  // unbroken: strictly safe (only costs performance), never wrong.
+  const bool ttUsable = !thrp->misereOn &&
+    (!thrp->trumpBreakRuleOn ||
+     trump == DDS_NOTRUMP ||
+     ctx.move_gen().trump_broken(tricks));
 
 #ifdef DDS_TOP_LEVEL
   ctx.search().nodes()++;
@@ -532,8 +543,12 @@ static bool ab_search_1_ctx(
   ctx.search().nodes()++;
 #endif
 
+  // Same rationale as ttUsable in ab_search_0_ctx: this heuristic assumes
+  // the classic maximize-your-own-tricks objective, so it's skipped (not
+  // re-derived) in misère mode, falling through to the exact search below.
   TIMER_START(TIMER_NO_QT, depth);
-  int res = QuickTricksSecondHand(* posPoint, hand, depth, target, trump, ctx);
+  int res = (thrp->misereOn ? 0 :
+    QuickTricksSecondHand(* posPoint, hand, depth, target, trump, ctx));
   TIMER_END(TIMER_NO_QT, depth);
   if (res) 
   {
@@ -751,7 +766,10 @@ static bool ab_search_3_ctx(
 
     ctx.search().trick_nodes()++; // As hand_rel_first == 0
 
-    if (ctx.search().node_type_store(posPoint->first[depth - 1]) == MAXNODE)
+    // Score by fixed reference-side membership, not by node_type_store -
+    // in misère mode the winner's node_type_store label no longer tells
+    // you which side tricks_max should count (see is_reference_hand()).
+    if (ctx.search().is_reference_hand(posPoint->first[depth - 1]))
       posPoint->tricks_max++;
 
   TIMER_START(TIMER_NO_AB, depth - 1);
@@ -761,7 +779,7 @@ static bool ab_search_3_ctx(
     TIMER_START(TIMER_NO_UNDO, depth);
   undo_0_ctx(posPoint, depth, * mply, ctx);
 
-    if (ctx.search().node_type_store(posPoint->first[depth - 1]) == MAXNODE)
+    if (ctx.search().is_reference_hand(posPoint->first[depth - 1]))
       posPoint->tricks_max--;
 
     TIMER_END(TIMER_NO_UNDO, depth);
@@ -1172,7 +1190,9 @@ EvalType evaluate_with_context(
       if (count >= 2)
         eval.win_ranks[trump] = rmax;
 
-      if (ctx.search().node_type_store(hmax) == MAXNODE)
+      // Scored by fixed reference-side membership, not node_type_store -
+      // see is_reference_hand() / ab_search_3_ctx for why.
+      if (ctx.search().is_reference_hand(hmax))
         goto maxexit;
       else
         goto minexit;
@@ -1205,7 +1225,9 @@ EvalType evaluate_with_context(
   if (count >= 2)
     eval.win_ranks[k] = rmax;
 
-  if (ctx.search().node_type_store(hmax) == MAXNODE)
+  // Scored by fixed reference-side membership, not node_type_store - see
+  // is_reference_hand() / ab_search_3_ctx for why.
+  if (ctx.search().is_reference_hand(hmax))
     goto maxexit;
   else
     goto minexit;

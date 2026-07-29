@@ -143,17 +143,30 @@ auto solve_board_internal(
   if ((dl.enforceTrumpBreak != 0) != thrp->trumpBreakRuleOn)
     newTrump = true;
 
+  // Misère mode changes what the transposition table's stored bounds mean
+  // (see ab_search.cpp's ttUsable), so a mode switch on a reused ThreadData
+  // needs the same kind of reset as a trump change, not just a trump-break
+  // flag change.
+  if ((dl.misere != 0) != thrp->misereOn)
+    newTrump = true;
+
   // ----------------------------------------------------------
   // Generic initialization.
   // ----------------------------------------------------------
 
   thrp->trump = dl.trump;
   thrp->trumpBreakRuleOn = (dl.enforceTrumpBreak != 0);
+  thrp->misereOn = (dl.misere != 0);
   ctx.search().ini_depth() = cardCount - 4;
   int ini_depth = ctx.search().ini_depth();
   int trick = (ini_depth + 3) >> 2;
   int hand_rel_first = (48 - ini_depth) % 4;
   int handToPlay = HAND_ID(dl.first, hand_rel_first);
+  // Declared here (uninitialized) rather than where it's actually computed
+  // below, because an earlier "only one legal move" shortcut further down
+  // has a goto that jumps past that point - see the assignment site for
+  // what this means and why it's needed.
+  bool handToPlayIsMax;
   ctx.search().trick_nodes() = 0;
 
   thrp->lookAheadPos.hand_rel_first = hand_rel_first;
@@ -229,20 +242,68 @@ auto solve_board_internal(
   }
   ctx.search().analysis_flag() = false;
 
-  if (handToPlay == 0 || handToPlay == 2)
+  // scoreParity is fixed by *who is on play*, independent of misère mode:
+  // it says which hands' trick wins count toward tricks_max (see
+  // SearchContext::is_reference_hand()), and that's always the partnership
+  // this solve is being asked about, whether we're maximizing or
+  // minimizing their tricks.
+  thrp->scoreParity = handToPlay & 1;
+
+  // Vanilla mode: the reference side (handToPlay's partnership) is MAXNODE
+  // - it plays to maximize its own trick count - and the other side is
+  // MINNODE - it defends normally, which (because the two sides' trick
+  // counts always sum to the tricks remaining) is the same policy as
+  // maximizing its own. Misère mode (Deal::misere != 0) inverts this: both
+  // partnerships play to minimize the tricks THEY take, which by the same
+  // fixed-sum argument means the reference side becomes MINNODE and the
+  // other side becomes MAXNODE. Scoring is unaffected by this flip -
+  // tricks_max still counts the reference side's own tricks either way,
+  // via is_reference_hand()/scoreParity above - only which side's decision
+  // nodes pick "up" vs "down" changes.
   {
-    ctx.search().node_type_store(0) = MAXNODE;
-    ctx.search().node_type_store(1) = MINNODE;
-    ctx.search().node_type_store(2) = MAXNODE;
-    ctx.search().node_type_store(3) = MINNODE;
+    const int refNode = thrp->misereOn ? MINNODE : MAXNODE;
+    const int othNode = thrp->misereOn ? MAXNODE : MINNODE;
+
+    if (handToPlay == 0 || handToPlay == 2)
+    {
+      ctx.search().node_type_store(0) = refNode;
+      ctx.search().node_type_store(1) = othNode;
+      ctx.search().node_type_store(2) = refNode;
+      ctx.search().node_type_store(3) = othNode;
+    }
+    else
+    {
+      ctx.search().node_type_store(0) = othNode;
+      ctx.search().node_type_store(1) = refNode;
+      ctx.search().node_type_store(2) = othNode;
+      ctx.search().node_type_store(3) = refNode;
+    }
   }
-  else
-  {
-    ctx.search().node_type_store(0) = MINNODE;
-    ctx.search().node_type_store(1) = MAXNODE;
-    ctx.search().node_type_store(2) = MINNODE;
-    ctx.search().node_type_store(3) = MAXNODE;
-  }
+
+  // Whether handToPlay's own decision nodes are MAXNODE (vanilla) or MINNODE
+  // (misère). This is ALWAYS true in vanilla mode and ALWAYS false in
+  // misère mode - handToPlay is by construction on the reference side (see
+  // scoreParity above), and refNode is exactly what handToPlay gets.
+  //
+  // This matters beyond just alpha-beta policy: best_move(depth) is only
+  // recorded by ab_search's move loop on a "cutoff" (a child whose returned
+  // value matches this hand's own success = (node_type_store(hand) ==
+  // MAXNODE)). When handToPlay is MAXNODE, a cutoff is exactly what makes
+  // the search return true - so "did we get a legit best_move" and "did
+  // ab_search return true" happen to be the same question, and the code
+  // below (written before misère mode existed) reads best_move whenever
+  // the raw return was true. When handToPlay is MINNODE (misère), that's
+  // backwards: a cutoff (a real best_move) is what makes the search return
+  // FALSE, while TRUE means every move was tried and none of them avoided
+  // the target (i.e. reference is forced into it regardless of choice) -
+  // best_move is stale in that case. Every "if (thrp->val) read best_move"
+  // site below needs to check bestMoveValid (== thrp->val when
+  // handToPlayIsMax, == !thrp->val when it isn't) instead of raw thrp->val
+  // for the "is best_move trustworthy right now" question - the raw
+  // thrp->val itself is still the right thing to drive the binary search's
+  // lowerbound/upperbound narrowing either way, since "tricks_max >=
+  // target achieved" is a mode-independent fact.
+  handToPlayIsMax = (ctx.search().node_type_store(handToPlay) == MAXNODE);
 
   for (int k = 0; k < hand_rel_first; k++)
   {
@@ -354,6 +415,19 @@ auto solve_board_internal(
 
     for (int mno = 0; mno < noMoves; mno++)
     {
+      // The carried-over `upperbound` from the previous candidate is a
+      // valid tight bound in vanilla mode (candidates are non-increasing
+      // as more get forbidden, so the old upperbound == old lowerbound
+      // still safely bounds this one from above). In misère mode the
+      // sequence runs the other way (non-decreasing), so that same old
+      // bound can wrongly cut this candidate's search off immediately -
+      // before a single fresh query - leaving `mv` stale from the
+      // previous (now-forbidden) candidate. Give misère mode a clean
+      // upperbound each time so it always gets at least one real query
+      // against the current forbidden-move set.
+      if (thrp->misereOn)
+        upperbound = 13;
+
       do
       {
         ctx.reset_best_moves_lite();
@@ -373,15 +447,34 @@ auto solve_board_internal(
 
         if (thrp->val)
         {
-          mv = ctx.search().best_move(ini_depth);
+          if (thrp->val == handToPlayIsMax)
+            mv = ctx.search().best_move(ini_depth);
           lowerbound = guess++;
         }
         else
+        {
+          if (thrp->val == handToPlayIsMax)
+            mv = ctx.search().best_move(ini_depth);
           upperbound = --guess;
+        }
       }
       while (lowerbound < upperbound);
 
-      if (lowerbound)
+      // In vanilla mode 0 is an absorbing floor (tricks can't go negative),
+      // and candidates are tried in non-increasing order (each iteration
+      // forbids the previous best, which can only hold a maximizer to the
+      // same value or less) - so once a candidate hits 0, every remaining
+      // untried candidate is guaranteed to also be 0, and the shortcut
+      // below is exact. In misère mode the roles invert: handToPlay is
+      // minimizing, so forbidding its best (lowest) choice can only push
+      // the achieved value up or leave it the same - the sequence is
+      // non-decreasing, and the meaningful absorbing bound is the ceiling
+      // (all remaining tricks), not 0. Rather than re-derive and validate
+      // that ceiling check under time pressure, misère mode simply never
+      // takes the shortcut - every candidate gets its own real binary
+      // search. Correct either way; just gives up a performance shortcut
+      // that only ever applied to the maximize case anyway.
+      if (lowerbound || thrp->misereOn)
       {
         ctx.search().best_move(ini_depth) = mv;
 
@@ -482,11 +575,16 @@ auto solve_board_internal(
 
       if (thrp->val)
       {
-        mv = ctx.search().best_move(ini_depth);
+        if (thrp->val == handToPlayIsMax)
+          mv = ctx.search().best_move(ini_depth);
         lowerbound = guess++;
       }
       else
+      {
+        if (thrp->val == handToPlayIsMax)
+          mv = ctx.search().best_move(ini_depth);
         upperbound = --guess;
+      }
 
     }
     while (lowerbound < upperbound);
@@ -494,7 +592,10 @@ auto solve_board_internal(
     
   ctx.search().best_move(ini_depth) = mv;
   
-    if (lowerbound == 0)
+    // See the solutions==3 block above for why misère mode can't use the
+    // "lowerbound == 0 implies everyone else is also 0" shortcut - the
+    // per-candidate sequence runs the other direction for a minimizer.
+    if (lowerbound == 0 && !thrp->misereOn)
     {
       // ALL the other moves must also have payoff 0.
 
@@ -560,12 +661,32 @@ auto solve_board_internal(
 
       goto SOLVER_STATS;
     }
-    else
+    else if (thrp->val == handToPlayIsMax)
     {
       futp->cards = 1;
       futp->suit[0] = ctx.search().best_move(ini_depth).suit;
       futp->rank[0] = ctx.search().best_move(ini_depth).rank;
       futp->equals[0] = ctx.search().best_move(ini_depth).sequence << 2;
+      futp->score[0] = target;
+
+      if (solutions != 2)
+        goto SOLVER_STATS;
+    }
+    else
+    {
+      // thrp->val is true (target achieved) but, in misère mode, that
+      // means every move was tried and none of them avoided the target -
+      // best_move wasn't populated by a cutoff. Every legal move is
+      // equally "forced" here, so any one of them correctly reports this
+      // score; just take whatever the plain move generator hands back
+      // first rather than trusting best_move.
+      ctx.move_gen().rewind(trick, hand_rel_first);
+      MoveType const * mp = ctx.move_gen().make_next_simple(trick, hand_rel_first);
+
+      futp->cards = 1;
+      futp->suit[0] = mp->suit;
+      futp->rank[0] = mp->rank;
+      futp->equals[0] = mp->sequence << 2;
       futp->score[0] = target;
 
       if (solutions != 2)
@@ -619,13 +740,32 @@ auto solve_board_internal(
     if (! thrp->val)
       break;
 
-    futp->cards = ind + 1;
-    futp->suit[ind] = ctx.search().best_move(ini_depth).suit;
-    futp->rank[ind] = ctx.search().best_move(ini_depth).rank;
-    futp->equals[ind] = ctx.search().best_move(ini_depth).sequence << 2;
-    
-    futp->score[ind] = futp->score[0];
-    ind++;
+    // NOTE: this loop's job is "find OTHER moves tied at exactly
+    // futp->score[0]". In vanilla mode that's equivalent to ">= score[0]"
+    // because score[0] was already established as the maximum - nothing
+    // can beat it. In misère mode score[0] is the *minimum*, so a move
+    // that merely satisfies ">= score[0]" could be strictly worse (a
+    // higher, non-tied trick count) rather than tied - this loop doesn't
+    // currently distinguish those for misère. It isn't reachable from
+    // SolveBoardPBN with the target/solutions values used elsewhere in
+    // this codebase (this path needs an explicit target >= 1 together
+    // with solutions == 2), so it's flagged rather than fully re-derived
+    // here. Only the best_move read below - a definite bug regardless of
+    // that open question - is fixed.
+    if (thrp->val == handToPlayIsMax)
+    {
+      futp->cards = ind + 1;
+      futp->suit[ind] = ctx.search().best_move(ini_depth).suit;
+      futp->rank[ind] = ctx.search().best_move(ini_depth).rank;
+      futp->equals[ind] = ctx.search().best_move(ini_depth).sequence << 2;
+
+      futp->score[ind] = futp->score[0];
+      ind++;
+    }
+    else
+    {
+      break;
+    }
   }
 
 

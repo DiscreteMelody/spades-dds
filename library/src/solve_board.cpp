@@ -147,6 +147,7 @@ int STDCALL SolveBoardPBN(
   dl.trump = dlpbn.trump;
   dl.enforceTrumpBreak = dlpbn.enforceTrumpBreak;
   dl.trumpAlreadyBroken = dlpbn.trumpAlreadyBroken;
+  dl.misere = dlpbn.misere;
 
   int res = SolveBoard(dl, target, solutions, mode, futp, thrId);
   return res;

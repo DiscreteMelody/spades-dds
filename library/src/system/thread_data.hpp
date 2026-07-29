@@ -55,6 +55,23 @@ struct ThreadData
   // Set from Deal::enforceTrumpBreak at the start of solve_board_internal().
   bool trumpBreakRuleOn = false;
 
+  // Opt-in "minimum tricks" (misère) mode. False reproduces classic
+  // maximum-tricks behaviour exactly. Set from Deal::misere at the start
+  // of solve_board_internal(). See SearchContext::is_reference_hand() for
+  // why this needs to be tracked separately from nodeTypeStore.
+  bool misereOn = false;
+
+  // Parity (hand & 1) of the reference side - the partnership containing
+  // whichever hand is on play at the start of the solve - fixed for the
+  // whole solve regardless of misereOn. Used by
+  // SearchContext::is_reference_hand() to decide which hand's trick wins
+  // count toward Pos::tricks_max. In vanilla (non-misère) solves this
+  // always coincides with "which hands are MAXNODE", because the reference
+  // side is always assigned MAXNODE there; misère solves invert the
+  // MAXNODE/MINNODE assignment (see solve_board_internal()) while this
+  // parity - and therefore what tricks_max counts - stays the same.
+  int scoreParity = 0;
+
   Pos lookAheadPos; // Recursive alpha-beta data
   bool analysisFlag;
   unsigned short int lowestWin[50][DDS_SUITS];
