@@ -428,6 +428,14 @@ auto solve_board_internal(
       if (thrp->misereOn)
         upperbound = 13;
 
+      // Tracks whether the alpha-beta search ever actually populated
+      // best_move for THIS candidate (see the capture-condition comment
+      // below). This can diverge from "lowerbound != 0": in misère mode
+      // capture happens on the opposite branch from bound-narrowing, so
+      // a candidate whose whole binary search takes only one branch
+      // (see below) leaves both mv AND mvCaptured at their prior state.
+      bool mvCaptured = false;
+
       do
       {
         ctx.reset_best_moves_lite();
@@ -447,34 +455,49 @@ auto solve_board_internal(
 
         if (thrp->val)
         {
+          // handToPlayIsMax is ALWAYS true in vanilla mode, so this is
+          // where vanilla captures its best_move (see the long comment
+          // at handToPlayIsMax's declaration). It's ALWAYS false in
+          // misère mode, so this branch never captures there - misère
+          // captures below instead. Either way, a cutoff on the
+          // "achieved" side is a real, meaningful best_move only when
+          // it matches handToPlayIsMax; the mismatched case just moves
+          // the bound and leaves best_move untouched for this query.
           if (thrp->val == handToPlayIsMax)
+          {
             mv = ctx.search().best_move(ini_depth);
+            mvCaptured = true;
+          }
           lowerbound = guess++;
         }
         else
         {
+          // Mirror image of the branch above: this is where misère
+          // mode captures its best_move (handToPlayIsMax == false, so
+          // thrp->val == false matches here), and never vanilla.
           if (thrp->val == handToPlayIsMax)
+          {
             mv = ctx.search().best_move(ini_depth);
+            mvCaptured = true;
+          }
           upperbound = --guess;
         }
       }
       while (lowerbound < upperbound);
 
-      // In vanilla mode 0 is an absorbing floor (tricks can't go negative),
-      // and candidates are tried in non-increasing order (each iteration
-      // forbids the previous best, which can only hold a maximizer to the
-      // same value or less) - so once a candidate hits 0, every remaining
-      // untried candidate is guaranteed to also be 0, and the shortcut
-      // below is exact. In misère mode the roles invert: handToPlay is
-      // minimizing, so forbidding its best (lowest) choice can only push
-      // the achieved value up or leave it the same - the sequence is
-      // non-decreasing, and the meaningful absorbing bound is the ceiling
-      // (all remaining tricks), not 0. Rather than re-derive and validate
-      // that ceiling check under time pressure, misère mode simply never
-      // takes the shortcut - every candidate gets its own real binary
-      // search. Correct either way; just gives up a performance shortcut
-      // that only ever applied to the maximize case anyway.
-      if (lowerbound || thrp->misereOn)
+      // In vanilla mode 0 is an absorbing floor (tricks can't go negative)
+      // and, in misère mode, 13 (or whatever the ceiling is at this depth)
+      // is the mirror-image absorbing ceiling - a candidate that hits
+      // either extreme, with best_move never captured by a cutoff, means
+      // every one of the not-yet-recorded candidates is provably tied at
+      // that same extreme too (nothing can beat a floor of 0 or a ceiling
+      // of "every remaining trick"). mvCaptured (not lowerbound, and not
+      // thrp->misereOn alone) is the direct signal for this: it's false
+      // exactly when the whole binary search for this candidate took only
+      // the branch that doesn't populate best_move for the current mode
+      // (see the two capture sites above), which is exactly the case
+      // where mv cannot be trusted, in either mode.
+      if (mvCaptured)
       {
         ctx.search().best_move(ini_depth) = mv;
 
@@ -502,7 +525,7 @@ auto solve_board_internal(
           futp->suit[mno + j] = mp->suit;
           futp->rank[mno + j] = mp->rank;
           futp->equals[mno + j] = mp->sequence << 2;
-          futp->score[mno + j] = 0;
+          futp->score[mno + j] = lowerbound;
         }
 
         break;
@@ -557,6 +580,15 @@ auto solve_board_internal(
     int guess = 7 - (handToPlay & 0x1);
     int upperbound = 13;
     int lowerbound = 0;
+
+    // See the equivalent tracking (and the two capture-site comments) in
+    // the solutions==3 block above: mvCaptured is the direct signal for
+    // "was best_move ever actually populated by a cutoff for this mode",
+    // which is what "lowerbound == 0 && !thrp->misereOn" was trying to
+    // approximate. It's the exact condition, in both modes, rather than
+    // an approximation that only happens to hold in vanilla mode.
+    bool mvCaptured = false;
+
     do
     {
         ctx.reset_best_moves_lite();
@@ -576,28 +608,35 @@ auto solve_board_internal(
       if (thrp->val)
       {
         if (thrp->val == handToPlayIsMax)
+        {
           mv = ctx.search().best_move(ini_depth);
+          mvCaptured = true;
+        }
         lowerbound = guess++;
       }
       else
       {
         if (thrp->val == handToPlayIsMax)
+        {
           mv = ctx.search().best_move(ini_depth);
+          mvCaptured = true;
+        }
         upperbound = --guess;
       }
 
     }
     while (lowerbound < upperbound);
 
-    
-  ctx.search().best_move(ini_depth) = mv;
-  
-    // See the solutions==3 block above for why misère mode can't use the
-    // "lowerbound == 0 implies everyone else is also 0" shortcut - the
-    // per-candidate sequence runs the other direction for a minimizer.
-    if (lowerbound == 0 && !thrp->misereOn)
+    // See the solutions==3 block above: a candidate whose best_move was
+    // never captured by a cutoff (mvCaptured == false) means every legal
+    // move here is provably tied at `lowerbound` - 0 in vanilla mode's
+    // floor case, or the ceiling in misère mode's mirror-image case
+    // (handToPlay forced to take every remaining trick regardless of
+    // choice). Read them straight from the move generator instead of
+    // trusting best_move, which was never actually set for this call.
+    if (!mvCaptured)
     {
-      // ALL the other moves must also have payoff 0.
+      // ALL the other moves must also have payoff `lowerbound`.
 
       if (solutions == 1) // We only need one of them
         futp->cards = 1;
@@ -610,7 +649,7 @@ auto solve_board_internal(
         MoveType const * mp = 
           ctx.move_gen().make_next_simple(trick, hand_rel_first);
 
-        futp->score[i] = 0;
+        futp->score[i] = lowerbound;
         futp->suit[i] = mp->suit;
         futp->rank[i] = mp->rank;
         futp->equals[i] = mp->sequence << 2;
@@ -618,8 +657,10 @@ auto solve_board_internal(
 
       goto SOLVER_STATS;
     }
-    else // payoff > 0
+    else // best_move is trustworthy
     {
+      ctx.search().best_move(ini_depth) = mv;
+
       futp->cards = 1;
       futp->score[0] = lowerbound;
       futp->suit[0] = mv.suit;
