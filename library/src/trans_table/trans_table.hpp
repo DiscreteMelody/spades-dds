@@ -31,7 +31,8 @@ enum class ResetReason
   NewTrump = 3,
   MemoryExhausted = 4,
   FreeMemory = 5,
-  Count = 6
+  NewObjective = 6,
+  Count = 7
 };
 
 inline constexpr int ResetReasonCount = static_cast<int>(ResetReason::Count);
@@ -146,6 +147,45 @@ class TransTable
     ///
     /// \param reason The reason this reset was triggered
     virtual auto reset_memory(ResetReason reason) -> void = 0;
+
+    /// \brief Declare which search objective the following solve will use.
+    ///
+    /// The bounds stored in a NodeCards entry are bounds on "how many of the
+    /// remaining tricks a particular partnership takes under optimal play".
+    /// Under the classic maximum-tricks objective and under the misère
+    /// (minimum-tricks) objective, "optimal play" means two different things,
+    /// so the same position has two different - and generally unequal - values.
+    /// The position key (trick, hand, aggr, hand_dist plus the rank-relevance
+    /// masks) does not encode the objective, so an entry written by one
+    /// objective would be silently readable by the other.
+    ///
+    /// Rather than widen every key by a bit, the table is keyed by objective at
+    /// the table level: it only ever holds entries for one objective at a time,
+    /// and switching objectives clears it. Callers must invoke this before
+    /// starting a solve; it is cheap and idempotent when the objective is
+    /// unchanged, which is the overwhelmingly common case.
+    ///
+    /// \param misere_on True for the misère (minimum tricks) objective, false
+    ///        for the classic maximum-tricks objective
+    auto set_objective(const bool misere_on) -> void
+    {
+      if (objective_valid_ && objective_misere_ == misere_on)
+        return;
+
+      // Only a table that actually holds entries needs clearing, but a reset of
+      // an empty table is harmless and this keeps the invariant trivial to
+      // reason about: after this call the table contains nothing that was
+      // written under a different objective.
+      if (objective_valid_)
+        reset_memory(ResetReason::NewObjective);
+
+      objective_valid_ = true;
+      objective_misere_ = misere_on;
+    }
+
+    /// \brief The objective this table currently holds entries for.
+    /// \return True if entries were written under the misère objective
+    auto objective_is_misere() const -> bool { return objective_misere_; }
 
     /// \brief Release all memory used by the transposition table.
     ///
@@ -277,6 +317,16 @@ class TransTable
     virtual auto print_reset_stats(std::ofstream& /*fout*/) const -> void
     {
     }
+
+  private:
+    /// \brief False until set_objective() has been called at least once.
+    /// A never-stamped table is empty as far as objective keying is concerned,
+    /// so the first stamp does not need to trigger a reset.
+    bool objective_valid_ = false;
+
+    /// \brief Which objective the currently held entries were written under.
+    /// \see set_objective
+    bool objective_misere_ = false;
 };
 
 #ifdef _MSC_VER

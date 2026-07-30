@@ -143,12 +143,11 @@ auto solve_board_internal(
   if ((dl.enforceTrumpBreak != 0) != thrp->trumpBreakRuleOn)
     newTrump = true;
 
-  // Misère mode changes what the transposition table's stored bounds mean
-  // (see ab_search.cpp's ttUsable), so a mode switch on a reused ThreadData
-  // needs the same kind of reset as a trump change, not just a trump-break
-  // flag change.
-  if ((dl.misere != 0) != thrp->misereOn)
-    newTrump = true;
+  // A misère/maximise switch also invalidates the transposition table, but it
+  // is deliberately NOT folded into newTrump here. newTrump only triggers a
+  // reset on the mode != 2 path below, whereas an objective switch has to
+  // invalidate the table unconditionally. It is handled by
+  // TransTable::set_objective() further down instead.
 
   // ----------------------------------------------------------
   // Generic initialization.
@@ -230,6 +229,30 @@ auto solve_board_internal(
   ctx.trans_table()->reset_memory(reason);
     }
   }
+
+  // Key the transposition table by search objective. Entries hold bounds on
+  // trick counts "under optimal play", and optimal play means something
+  // different under the maximise and misère objectives, so the same position
+  // legitimately has two different values and the two sets of entries must
+  // never mix.
+  //
+  // This matters on any entry point that reuses a SolverContext across solves,
+  // because the table lives on the context: the modern API (dds_solve_board /
+  // SolveBoard(ctx, ...)) hands the caller a long-lived context, and
+  // calc_tables.cpp deliberately shares one across boards. A caller that
+  // alternates misère and maximise solves on such a context would otherwise
+  // read entries written under the other objective and get wrong scores. The
+  // legacy SolveBoard/SolveBoardPBN entry points happen to be immune because
+  // they construct a fresh context per call, but that is an implementation
+  // detail of those wrappers, not a property of the search - so the guard
+  // belongs here, once, rather than in each wrapper.
+  //
+  // Deliberately NOT conditional on mode, unlike the reset above: mode == 2
+  // suppresses that reset precisely in order to preserve the table, so gating
+  // this on mode would disable it exactly when it is needed.
+  // set_objective() is a no-op when the objective has not changed, so the
+  // normal case costs nothing. See trans_table.hpp.
+  ctx.trans_table()->set_objective(thrp->misereOn);
 
   if (newDeal)
   {

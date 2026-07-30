@@ -208,19 +208,55 @@ static bool ab_search_0_ctx(
   // rule is off, or trump == DDS_NOTRUMP, this is always true and there
   // is no behavior change whatsoever.
   //
-  // Misère mode: the transposition table and the QuickTricks/
-  // LaterTricksMIN/LaterTricksMAX heuristics below all assume the classic
-  // maximize-your-own-tricks objective (they reason about "certain
-  // winners", which has no direct misère analogue without separately
-  // re-deriving each heuristic's math for a minimize-your-own-tricks
-  // objective). Rather than risk a wrong cutoff from an unreviewed
-  // heuristic, misère solves skip all of it and fall through to the same
-  // exact, move-generation-based search used below when trump is
-  // unbroken: strictly safe (only costs performance), never wrong.
-  const bool ttUsable = !thrp->misereOn &&
+  const bool trumpLeadUnrestricted =
     (!thrp->trumpBreakRuleOn ||
      trump == DDS_NOTRUMP ||
      ctx.move_gen().trump_broken(tricks));
+
+  // The transposition table IS valid under the misère objective, and is used
+  // there. Everything the table does is already parameterised by node type
+  // rather than by the objective:
+  //
+  //   - The stored bounds are derived below (see the NodeCards block at
+  //     ABexit) purely from `value`, `target`, `tricks_max` and `tricks`,
+  //     branching on node_type_store(0). solver_if.cpp flips the MAXNODE/
+  //     MINNODE assignment for misère, so that branch already selects the
+  //     right accounting: the table ends up holding bounds on the tricks
+  //     taken by whichever side is NOT the reference side under misère, and
+  //     by the reference side under maximise. lookup()'s `limit` computation
+  //     and its lower_flag -> scoreFlag mapping branch on the same
+  //     node_type_store(0) and so agree with it in both modes.
+  //
+  //   - The rank-relevance abstraction that lets one entry match many
+  //     positions (win_ranks / least_win, i.e. "cards below the lowest card
+  //     that actually won anything in this subtree are interchangeable") is a
+  //     statement about trick mechanics, not about who wanted to win. Its
+  //     propagation in the move loops keys off
+  //     success = (node_type_store(hand) == MAXNODE), which misère flips
+  //     correctly along with everything else.
+  //
+  // What the key does NOT encode is the objective itself, so an entry written
+  // under one objective must never be visible to the other. That is enforced
+  // at the table rather than here: solver_if.cpp stamps the table via
+  // TransTable::set_objective() before every solve, and the table clears
+  // itself on a change. See trans_table.hpp.
+  const bool ttUsable = trumpLeadUnrestricted;
+
+  // QuickTricks/LaterTricksMIN/LaterTricksMAX are a different story and stay
+  // disabled under misère. They compute a lower bound on the tricks the side
+  // on lead can GUARANTEE ITSELF by force, and the caller compares that
+  // against a cutoff expressed in tricks needed by the REFERENCE side. Under
+  // the maximise objective those are the same currency, because the hand on
+  // lead is a MAXNODE exactly when it is on the reference side. Misère breaks
+  // that coupling: the reference side becomes MINNODE, so a MAXNODE hand is
+  // now the non-reference side and the comparison is between two different
+  // partnerships' trick counts. Nor can it be repaired by flipping a sign -
+  // an "achievable if I try" lower bound is a bound in the direction each
+  // side is trying to AVOID under misère, so it constrains nothing about the
+  // value of optimal misère play. The misère analogue would have to be a
+  // FORCED-tricks bound (tricks a side takes however it plays), which is a
+  // different computation, not a re-parameterisation of this one.
+  const bool quickTricksUsable = trumpLeadUnrestricted && !thrp->misereOn;
 
 #ifdef DDS_TOP_LEVEL
   ctx.search().nodes()++;
@@ -303,8 +339,9 @@ static bool ab_search_0_ctx(
   // assuming an unbroken trump suit can be freely led. Skip them in
   // that regime and fall through to the exact, move-generation-based
   // search below instead: strictly safe (only costs some performance
-  // while trump is unbroken), never wrong.
-  if (ttUsable)
+  // while trump is unbroken), never wrong. Also skipped under misère, for
+  // the separate reason given at quickTricksUsable above.
+  if (quickTricksUsable)
   {
   bool res;
   TIMER_START(TIMER_NO_QT, depth);

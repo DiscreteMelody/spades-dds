@@ -199,12 +199,15 @@ struct FutureTricks
  *        is read). 0 = classic maximum-tricks behaviour (default). Non-zero
  *        = misère. Existing callers that do not set this field (e.g.
  *        structs built against an older header, left zero-initialized) get
- *        exactly the historical maximum-tricks behaviour. Because several
- *        performance heuristics (the transposition table, QuickTricks,
- *        LaterTricksMIN/MAX) assume the classic maximize-your-own-tricks
- *        objective, they are bypassed while this is set - the position is
- *        solved exactly, just without those speedups, so misère solves are
- *        expected to be slower than an equivalent maximum-tricks solve.
+ *        exactly the historical maximum-tricks behaviour. The transposition
+ *        table is used in this mode (its bounds are parameterised by node
+ *        type, which misère flips consistently) and is keyed by objective so
+ *        entries can never be shared between the two. The QuickTricks and
+ *        LaterTricksMIN/MAX heuristics ARE bypassed: they bound the tricks a
+ *        side can guarantee itself by force, which is a bound in the
+ *        direction each side is trying to avoid under misère. Misère solves
+ *        are therefore still somewhat slower than an equivalent
+ *        maximum-tricks solve, but not dramatically so.
  */
 struct Deal
 {

@@ -127,6 +127,7 @@ auto TransTableS::init(const int hand_lookup[][15]) -> void
   reset_text_[static_cast<int>(ResetReason::NewTrump)] = "New trump";
   reset_text_[static_cast<int>(ResetReason::MemoryExhausted)] = "Memory exhausted";
   reset_text_[static_cast<int>(ResetReason::FreeMemory)] = "Free thread memory";
+  reset_text_[static_cast<int>(ResetReason::NewObjective)] = "New objective";
 
 }
 
