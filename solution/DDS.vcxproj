@@ -74,6 +74,8 @@
     <ClCompile Include="..\library\src\later_tricks.cpp" />
     <ClCompile Include="..\library\src\lookup_tables\lookup_tables.cpp" />
     <ClCompile Include="..\library\src\moves\moves.cpp" />
+    <ClCompile Include="..\library\src\nil_if.cpp" />
+    <ClCompile Include="..\library\src\nil_search.cpp" />
     <ClCompile Include="..\library\src\par.cpp" />
     <ClCompile Include="..\library\src\pbn.cpp" />
     <ClCompile Include="..\library\src\play_analyser.cpp" />
@@ -120,6 +122,9 @@
     <ClInclude Include="..\library\src\later_tricks.hpp" />
     <ClInclude Include="..\library\src\lookup_tables\lookup_tables.hpp" />
     <ClInclude Include="..\library\src\moves\moves.hpp" />
+    <ClInclude Include="..\library\src\nil_if.hpp" />
+    <ClInclude Include="..\library\src\nil_objective.hpp" />
+    <ClInclude Include="..\library\src\nil_search.hpp" />
     <ClInclude Include="..\library\src\pbn.hpp" />
     <ClInclude Include="..\library\src\play_analyser.hpp" />
     <ClInclude Include="..\library\src\quick_tricks.hpp" />

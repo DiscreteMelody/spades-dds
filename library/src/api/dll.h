@@ -262,6 +262,61 @@ struct DealPBN
  * @param solutions Array of solution modes for each Deal
  * @param mode Array of modes for each Deal
  */
+/**
+ * @brief A Spades deal with exactly one nil bidder, for the nil-mode solver.
+ *
+ * Deliberately a separate struct rather than extra fields on Deal. Two
+ * reasons: the existing Deal/DealPBN mirrors carry a known 12-byte ABI
+ * mismatch on the C# side that a new struct need not inherit, and a fresh
+ * struct can choose an encoding whose zero value is safe.
+ *
+ * @param nilSeatPlus1 The nil bidder's DDS hand index PLUS ONE
+ *        (1 = North, 2 = East, 3 = South, 4 = West). Zero means "unset" and
+ *        is rejected. This encoding exists because Deal is zero-initialised by
+ *        callers across the Python bindings, the examples and C#'s
+ *        default(Deal); a raw seat index would make a zero-filled struct
+ *        silently request "North bid nil" instead of failing loudly.
+ * @param nilAlreadyBroken The nil seat has already won a trick earlier in the
+ *        round. Cards already played to the in-progress trick do not count -
+ *        nobody has won that trick yet. Not derivable from the deal; the
+ *        caller supplies it.
+ * @param direction Trick-count preference for both sides. 1 = each side
+ *        prefers more of its own tricks; 0 = fewer. Does NOT change which
+ *        side maximises: the nil side always maximises the packed value.
+ *        Zero-initialising gives 0, so callers must set this explicitly if
+ *        they want the usual "keep your tricks" convention.
+ */
+struct DealNil
+{
+  int trump;
+  int first;
+  int currentTrickSuit[3];
+  int currentTrickRank[3];
+  unsigned int remainCards[DDS_HANDS][DDS_SUITS];
+  int enforceTrumpBreak;
+  int trumpAlreadyBroken;
+  int nilSeatPlus1;
+  int nilAlreadyBroken;
+  int direction;
+};
+
+/**
+ * @brief PBN-format variant of DealNil.
+ */
+struct DealNilPBN
+{
+  int trump;
+  int first;
+  int currentTrickSuit[3];
+  int currentTrickRank[3];
+  char remainCards[80];
+  int enforceTrumpBreak;
+  int trumpAlreadyBroken;
+  int nilSeatPlus1;
+  int nilAlreadyBroken;
+  int direction;
+};
+
 struct Boards
 {
   int no_of_boards;
@@ -562,6 +617,42 @@ EXTERN_C DLLEXPORT auto STDCALL SolveBoard(
   struct Deal dl,
   int target,
   int solutions,
+  int mode,
+  struct FutureTricks * futp,
+  int threadIndex) -> int;
+
+/**
+ * @brief Solve a Spades deal containing exactly one nil bidder.
+ *
+ * Returns a value for every legal card at the root in futp->score[i]. That
+ * value is a PACKED integer, not a trick count: three strictly lexicographic
+ * terms - whether the nil is made, then the cover seat's tricks alone, then
+ * the nil seat's own tricks. Use nil_decode_value(), or the identical
+ * arithmetic, to unpack it. Comparing scores to find the best card works
+ * directly on the packed form; interpreting one as a trick count does not.
+ *
+ * futp is byte-identical to the ordinary FutureTricks. Packed values are
+ * always non-negative, so they cannot collide with the negative sentinels.
+ *
+ * @param dl Deal with nil configuration. nilSeatPlus1 is 1-based; zero is
+ *        rejected rather than silently read as North.
+ * @param mode 0 = Exact (value for every card), 1 = PrimaryOnly (resolve only
+ *        whether the nil can be made)
+ * @param futp Output
+ * @param threadIndex Unused; present for signature symmetry with SolveBoard
+ * @return 1 on success, error code otherwise
+ */
+EXTERN_C DLLEXPORT auto STDCALL SolveBoardNil(
+  struct DealNil dl,
+  int mode,
+  struct FutureTricks * futp,
+  int threadIndex) -> int;
+
+/**
+ * @brief PBN-format variant of SolveBoardNil.
+ */
+EXTERN_C DLLEXPORT auto STDCALL SolveBoardNilPBN(
+  struct DealNilPBN dl,
   int mode,
   struct FutureTricks * futp,
   int threadIndex) -> int;

@@ -81,6 +81,12 @@
     <ClCompile Include="..\library\src\moves\moves.cpp">
       <Filter>library\src\moves</Filter>
     </ClCompile>
+    <ClCompile Include="..\library\src\nil_if.cpp">
+      <Filter>library\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\library\src\nil_search.cpp">
+      <Filter>library\src</Filter>
+    </ClCompile>
     <ClCompile Include="..\library\src\par.cpp">
       <Filter>library\src</Filter>
     </ClCompile>
@@ -217,6 +223,15 @@
     </ClInclude>
     <ClInclude Include="..\library\src\moves\moves.hpp">
       <Filter>library\src\moves</Filter>
+    </ClInclude>
+    <ClInclude Include="..\library\src\nil_if.hpp">
+      <Filter>library\src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\library\src\nil_objective.hpp">
+      <Filter>library\src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\library\src\nil_search.hpp">
+      <Filter>library\src</Filter>
     </ClInclude>
     <ClInclude Include="..\library\src\pbn.hpp">
       <Filter>library\src</Filter>

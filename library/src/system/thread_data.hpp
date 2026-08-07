@@ -135,6 +135,52 @@ struct ThreadData
   {
     return debug_files_initialized_;
   }
+
+  // ---- Nil mode ----------------------------------------------------------
+  // Appended at the very END of the struct, deliberately. Every field above
+  // keeps its offset, so translation units that never touch nil mode compile
+  // to the same instructions they did before.
+  //
+  // The two counters would sit more naturally on Pos, next to tricks_max, but
+  // Pos is embedded in this struct by value - growing it would shift every
+  // member declared after lookAheadPos and perturb the existing search's
+  // generated code for no functional reason. There is exactly one Pos per
+  // thread, so holding the counters here instead is equivalent.
+  //
+  // All of these are ignored unless nilOn is true, and nilOn is only ever set
+  // by the nil entry point in nil_if.cpp. The existing search never reads
+  // them. Defaults make a zero-initialised ThreadData a valid non-nil
+  // configuration.
+
+  /// Opt-in per-seat nil objective. False reproduces existing behaviour exactly.
+  bool nilOn = false;
+
+  /// DDS hand index (0-3) of the nil bidder. Only meaningful when nilOn.
+  /// A raw seat here, not the +1-encoded form used on the public DealNil
+  /// struct - nil_if.cpp decodes it once at the boundary.
+  int nilSeat = 0;
+
+  /// The nil bidder has already won a trick EARLIER IN THE ROUND, before this
+  /// position. Cards already played to the in-progress trick do not count.
+  /// Pins the primary term to "set" for the whole search.
+  bool nilAlreadyBroken = false;
+
+  /// Direction flag. True = each side prefers more of its own tricks; false =
+  /// fewer. Never changes node polarity - see nil_objective.hpp.
+  bool nilDirection = true;
+
+  /// Total tricks in the search, including any in-progress trick. Fixed at the
+  /// root; the packing radix derives from it and it must not be recomputed per
+  /// node.
+  int nilTricksTotal = 0;
+
+  /// Tricks won by the nil seat along the current search path. The nil
+  /// analogue of Pos::tricks_max, but counting a SEAT by exact identity
+  /// rather than a side by parity.
+  int nilTricks = 0;
+
+  /// Tricks won by the nil bidder's partner along the current search path.
+  int nilCoverTricks = 0;
 };
 
 

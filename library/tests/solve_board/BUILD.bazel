@@ -42,3 +42,16 @@ cc_test(
     ],
     copts = DDS_CPPOPTS,
 )
+
+cc_test(
+    name = "nil_mode_test",
+    size = "small",
+    srcs = [
+        "nil_mode_test.cpp",
+    ],
+    deps = [
+        "//library/src:testable_dds",
+        "@googletest//:gtest_main",
+    ],
+    copts = DDS_CPPOPTS,
+)

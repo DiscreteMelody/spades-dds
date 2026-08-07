@@ -279,6 +279,32 @@ public:
     // own tricks, so scoring is decoupled from policy via this accessor
     // instead of continuing to key off node_type_store.
     auto is_reference_hand(int hand) const -> bool { return (hand & 1) == thr_->scoreParity; }
+    // ---- Nil mode ------------------------------------------------------
+    // Read-only views of the nil configuration on ThreadData. Nothing on the
+    // existing search path calls any of these; they exist so nil_search.cpp
+    // can reach the configuration through the same facade as everything else
+    // rather than dereferencing ThreadData directly.
+    //
+    // is_nil_seat / is_cover_seat are EXACT hand-identity tests, deliberately
+    // not parity tests. is_reference_hand() above answers a partnership
+    // question and cannot attribute a trick to a seat, which is precisely
+    // what the nil objective's secondary and tertiary terms require.
+    auto nil_on() const -> bool { return thr_->nilOn; }
+    auto nil_seat() const -> int { return thr_->nilSeat; }
+    auto nil_cover_seat() const -> int { return thr_->nilSeat ^ 2; }
+    auto is_nil_seat(int hand) const -> bool { return hand == thr_->nilSeat; }
+    auto is_cover_seat(int hand) const -> bool { return hand == (thr_->nilSeat ^ 2); }
+    auto nil_already_broken() const -> bool { return thr_->nilAlreadyBroken; }
+    auto nil_direction() const -> bool { return thr_->nilDirection; }
+    auto nil_tricks_total() const -> int { return thr_->nilTricksTotal; }
+    // Path counters. These live on ThreadData rather than Pos so that Pos's
+    // size - and therefore every ThreadData offset after lookAheadPos - is
+    // unchanged by nil mode. There is one Pos per thread, so the lifetime is
+    // identical either way.
+    auto nil_tricks() -> int& { return thr_->nilTricks; }
+    auto nil_tricks() const -> int { return thr_->nilTricks; }
+    auto nil_cover_tricks() -> int& { return thr_->nilCoverTricks; }
+    auto nil_cover_tricks() const -> int { return thr_->nilCoverTricks; }
     // Access to forbidden moves buffer used by Moves::Purge and solver loops
     auto forbidden_moves() -> MoveType* { return thr_->forbiddenMoves; }
     auto forbidden_moves() const -> const MoveType* { return thr_->forbiddenMoves; }
