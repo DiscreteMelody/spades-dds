@@ -468,10 +468,23 @@ auto solve_board_nil_internal(
       ctx.move_gen().move_gen_123(trick, hand_rel_first, thrp->lookAheadPos);
 
     // Walk to the mno'th generated move.
+    //
+    // The win_ranks argument is NOT a don't-care. MakeNext uses it to allow
+    // one "small" move per suit and then require later cards in that suit to
+    // clear lowest_rank[win_ranks[suit]]. An all-zero array makes that lookup
+    // return 0, which the guard inside MakeNext turns into 15 - a threshold no
+    // card can meet - so every card of a suit after the first is silently
+    // skipped. At the root that is fatal: the caller reads futp->cards and a
+    // dropped card is simply absent from the answer, best card included.
+    //
+    // bit_map_rank[2] makes lowest_rank return 2. No card ranks below 2, so
+    // the threshold is never armed and every legal move is enumerated. The
+    // interior search in nil_search.cpp passes real win_ranks and is unaffected.
     MoveType const* mply = NULL;
-    unsigned short dummyWin[DDS_SUITS] = {0, 0, 0, 0};
+    unsigned short allowAll[DDS_SUITS] = {
+      bit_map_rank[2], bit_map_rank[2], bit_map_rank[2], bit_map_rank[2]};
     for (int step = 0; step <= mno; step++)
-      mply = ctx.move_gen().make_next(trick, hand_rel_first, dummyWin);
+      mply = ctx.move_gen().make_next(trick, hand_rel_first, allowAll);
 
     if (mply == NULL)
       break;
