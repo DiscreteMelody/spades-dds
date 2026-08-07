@@ -57,6 +57,90 @@ auto board_value_checks(
   const int mode) -> int;
 
 
+/// Resolve V for the position currently on the board, by staged probing.
+///
+/// nil_ab_search answers a monotone predicate: true iff the nil side can force
+/// V >= guess. Any strategy for locating V is therefore just a strategy for
+/// placing probes, and none of them can change the answer - only how long it
+/// takes to find. The Phase 2 driver scanned down from max_value(T) one step at
+/// a time, which is up to 391 full searches per root card at T = 13, and the
+/// expensive ones are the ~196 below R*R where the primary term is already
+/// settled and the bounds stop cutting.
+///
+/// V is lexicographic, so the same answer falls out of about nine probes placed
+/// on the term boundaries:
+///
+///   1. one probe at R*R fixes the primary term - nil made or nil set,
+///   2. a binary search on the secondary term inside the band that fixes,
+///   3. a binary search on the tertiary term inside that.
+///
+/// This costs about what a flat binary search over 0..max_value(T) would, but
+/// the probes land on boundaries the bounds understand, and a caller that only
+/// needs the made/set answer can stop after stage 1.
+///
+/// Exactness rests on R = T + 1 > T. If the true secondary term were sC - 1
+/// then R*(sC-1) + sN <= R*sC - R + T < R*sC, so a probe at base + R*sC fails -
+/// the tertiary term can never bridge a secondary step. The same argument
+/// separates the primary term, since R*T + T = R*R - 1.
+///
+/// Neither stage probes its own zero. V >= 0 always holds, and for base = R*R
+/// stage 1 has already proved V >= base, so those probes are known-true and
+/// skipping them costs nothing.
+static auto nil_resolve_value(
+  Pos* posPoint,
+  const int depth,
+  const int childRel,
+  const int tricksTotal,
+  const bool primaryOnly,
+  SolverContext& ctx) -> int
+{
+  const int T = tricksTotal;
+  const int R = nil_mode::radix(T);
+
+  // Stage 1.
+  const int base = nil_ab_search(posPoint, R * R, depth, childRel, ctx)
+    ? (R * R)
+    : 0;
+
+  if (primaryOnly)
+    return base;
+
+  // Stage 2. Largest sC with V >= base + R*sC. hi starts one past T because a
+  // seat's directed count never exceeds T, so that probe is known to fail and
+  // is never issued - the loop only ever evaluates mid, which stays <= T.
+  int lo = 0;
+  int hi = T + 1;
+
+  while (hi - lo > 1)
+  {
+    const int mid = lo + (hi - lo) / 2;
+
+    if (nil_ab_search(posPoint, base + R * mid, depth, childRel, ctx))
+      lo = mid;
+    else
+      hi = mid;
+  }
+
+  const int sC = lo;
+
+  // Stage 3. Same shape, one term down.
+  lo = 0;
+  hi = T + 1;
+
+  while (hi - lo > 1)
+  {
+    const int mid = lo + (hi - lo) / 2;
+
+    if (nil_ab_search(posPoint, base + R * sC + mid, depth, childRel, ctx))
+      lo = mid;
+    else
+      hi = mid;
+  }
+
+  return base + R * sC + lo;
+}
+
+
 /// Project a DealNil onto the plain Deal that the shared validation helpers,
 /// InitWinners and the move generator all expect. misere is forced to 0: the
 /// nil search never consults it, and leaving it unset keeps a zero-initialised
@@ -432,12 +516,22 @@ auto solve_board_nil_internal(
   // shared between candidates, so a stale best_move cannot leak from one card
   // to the next. Slower and obviously correct, which is the Phase 2 trade.
   //
-  // The per-card value is found by descending linear scan. Phase 5 replaces
-  // this with a binary search over 0..max_value(T); until then this is the
-  // simplest thing that cannot be subtly wrong about bounds.
+  // The per-card value comes from nil_resolve_value(), which probes on the
+  // term boundaries of V rather than scanning down from max_value(T). Probe
+  // placement cannot affect the answer - nil_ab_search's predicate is monotone
+  // in guess - so this is a pure cost change, and the values written to
+  // futp->score are identical to the Phase 2 driver's in Exact mode.
+  //
+  // Root candidates are still resolved independently, with no bounds carried
+  // between them. That is what keeps the mvCaptured failure mode sealed off,
+  // and it is not what makes the driver slow.
 
-  const int vMax = nil_mode::max_value(tricksTotal);
   const int radix = nil_mode::radix(tricksTotal);
+
+  // In PrimaryOnly the resolution stops after stage 1, so score carries the
+  // primary term alone and the loop below exits at the first card that makes
+  // the nil. Exact runs all three stages and yields a full packed V.
+  const bool primaryOnly = (mode == static_cast<int>(NilMode::PrimaryOnly));
 
   futp->cards = 0;
   futp->nodes = 0;
@@ -511,11 +605,8 @@ auto solve_board_nil_internal(
       else if (winner == (nilSeat ^ 2))
         thrp->nilCoverTricks++;
 
-      value = vMax;
-      while (value > 0 &&
-             !nil_ab_search(&thrp->lookAheadPos, value, ini_depth - 1,
-                            childRel, ctx))
-        value--;
+      value = nil_resolve_value(&thrp->lookAheadPos, ini_depth - 1, childRel,
+                                tricksTotal, primaryOnly, ctx);
 
       if (winner == nilSeat)
         thrp->nilTricks--;
@@ -533,11 +624,8 @@ auto solve_board_nil_internal(
       else
         make_2(&thrp->lookAheadPos, ini_depth, &rootMove);
 
-      value = vMax;
-      while (value > 0 &&
-             !nil_ab_search(&thrp->lookAheadPos, value, ini_depth - 1,
-                            childRel, ctx))
-        value--;
+      value = nil_resolve_value(&thrp->lookAheadPos, ini_depth - 1, childRel,
+                                tricksTotal, primaryOnly, ctx);
 
       if (hand_rel_first == 0)
         undo_1(&thrp->lookAheadPos, ini_depth, rootMove);
@@ -553,11 +641,12 @@ auto solve_board_nil_internal(
     futp->score[futp->cards] = value;
     futp->cards++;
 
-    if (mode == static_cast<int>(NilMode::PrimaryOnly) && value >= radix * radix)
+    if (primaryOnly && value >= radix * radix)
     {
       // Primary resolved favourably; the remaining cards cannot say more about
-      // the made/set question. Phase 4 replaces the scan above with a single
-      // query at guess = (T+1)^2, which is what makes this mode cheap.
+      // the made/set question. Combined with the single-probe resolution above,
+      // this is what makes the mode cheap: one search per card, stopping at the
+      // first card that makes the nil.
       break;
     }
   }

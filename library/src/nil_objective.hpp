@@ -127,13 +127,54 @@ struct NodeCounts
   bool m;
 };
 
-/// \brief Loosest sound upper bound on V from this node - the most the nil side
-///        could conceivably still reach.
+/// \brief How the tricks still to be played are shared between the cover seat
+///        and the nil seat at a bound's extremum.
+struct Split
+{
+  int cover;
+  int nil;
+};
+
+/// \brief Greedy allocation of tricksLeft, secondary term first.
 ///
-/// Each term is maximised independently. That can describe a state no real
-/// playout reaches (e.g. nil made AND the nil seat taking every remaining
-/// trick), which is fine: an upper bound only has to be >= the true value.
-/// Tightening this is a later optimisation, not a correctness matter.
+/// The Phase 2 bounds moved sC and sN independently, which let BOTH seats
+/// absorb the whole of tricksLeft. No playout reaches that: the two seats
+/// compete for the same tricks, so dC + dN <= tricksLeft.
+///
+/// Applying the joint constraint means deciding which term gets the tricks.
+/// R = T + 1, so one unit of the secondary term outweighs the entire range of
+/// the tertiary one - the extremum therefore always feeds the cover seat to
+/// capacity and gives the nil seat the remainder. Each seat is separately
+/// capped at T minus its own running count, so the results land inside [0, T]
+/// on their own rather than relying on the caller's clamp.
+///
+/// This is a bound tightening only. It removes unreachable states from the
+/// bound's range; it never removes a reachable one, so no value the search can
+/// return changes.
+constexpr auto split_cover_first(const NodeCounts& c) -> Split
+{
+  const int T = c.tricksTotal;
+  const int left = clamp(c.tricksLeft, 0, T);
+
+  const int capC = clamp(T - c.coverTricks, 0, T);
+  const int dC = clamp(left, 0, capC);
+
+  const int capN = clamp(T - c.nilTricks, 0, T);
+  const int dN = clamp(left - dC, 0, capN);
+
+  return Split{ dC, dN };
+}
+
+/// \brief Sound upper bound on V from this node - the most the nil side could
+///        conceivably still reach.
+///
+/// Tightened over Phase 2 by the joint constraint above. The primary term is
+/// deliberately left alone: proving that a still-intact nil must break needs
+/// real search, not arithmetic.
+///
+/// m = 1: both seats prefer more tricks, so the maximum hands out the
+/// remaining tricks cover-first. m = 0: both prefer fewer, so the maximum sits
+/// at dC = dN = 0 and no allocation arises - that branch was already tight.
 constexpr auto upper_bound(const NodeCounts& c) -> int
 {
   const int T = c.tricksTotal;
@@ -141,17 +182,16 @@ constexpr auto upper_bound(const NodeCounts& c) -> int
 
   const int primary = c.nilBroken ? 0 : (R * R);
 
-  // m = 1: cover wants more tricks, so assume it wins everything left.
-  // m = 0: cover wants fewer, so assume it wins nothing more.
-  const int sC = c.m
-    ? clamp(c.coverTricks + c.tricksLeft, 0, T)
-    : clamp(T - c.coverTricks, 0, T);
+  if (!c.m)
+    return primary
+      + R * clamp(T - c.coverTricks, 0, T)
+      + clamp(T - c.nilTricks, 0, T);
 
-  const int sN = c.m
-    ? clamp(c.nilTricks + c.tricksLeft, 0, T)
-    : clamp(T - c.nilTricks, 0, T);
+  const Split d = split_cover_first(c);
 
-  return primary + R * sC + sN;
+  return primary
+    + R * clamp(c.coverTricks + d.cover, 0, T)
+    + clamp(c.nilTricks + d.nil, 0, T);
 }
 
 /// \brief Loosest sound lower bound on V from this node - the least the nil side
@@ -159,6 +199,8 @@ constexpr auto upper_bound(const NodeCounts& c) -> int
 ///
 /// The primary term survives only when the nil is already safe, which below the
 /// root means no tricks remain to break it.
+/// The direction split mirrors upper_bound's, reversed: m = 1 is already tight
+/// at dC = dN = 0, and m = 0 is the branch the joint constraint improves.
 constexpr auto lower_bound(const NodeCounts& c) -> int
 {
   const int T = c.tricksTotal;
@@ -167,15 +209,16 @@ constexpr auto lower_bound(const NodeCounts& c) -> int
   const bool nilStillSafe = (!c.nilBroken && c.tricksLeft <= 0);
   const int primary = nilStillSafe ? (R * R) : 0;
 
-  const int sC = c.m
-    ? clamp(c.coverTricks, 0, T)
-    : clamp(T - (c.coverTricks + c.tricksLeft), 0, T);
+  if (c.m)
+    return primary
+      + R * clamp(c.coverTricks, 0, T)
+      + clamp(c.nilTricks, 0, T);
 
-  const int sN = c.m
-    ? clamp(c.nilTricks, 0, T)
-    : clamp(T - (c.nilTricks + c.tricksLeft), 0, T);
+  const Split d = split_cover_first(c);
 
-  return primary + R * sC + sN;
+  return primary
+    + R * clamp(T - (c.coverTricks + d.cover), 0, T)
+    + clamp(T - (c.nilTricks + d.nil), 0, T);
 }
 
 }  // namespace nil_mode

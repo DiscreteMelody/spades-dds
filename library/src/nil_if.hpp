@@ -20,8 +20,14 @@ enum class NilMode : int
   Exact = 0,
 
   /// Resolve only whether the nil can be made - a single boolean query at
-  /// guess = (T+1)^2. Serves the bid-evaluation batch, which needs no trick
-  /// counts. Added in Phase 4; Exact is the Phase 2 deliverable.
+  /// guess = (T+1)^2 per card, stopping at the first card that makes it.
+  /// Serves the bid-evaluation batch, which needs no trick counts.
+  ///
+  /// The scores returned in this mode are (T+1)^2 or 0 - the primary term
+  /// alone, with both trick-count terms left at zero. Test them against
+  /// (T+1)^2; do NOT pass them to nil_decode_value() expecting trick counts,
+  /// which would report the zeroed terms as though they had been searched.
+  /// Use Exact for anything that reads nilTricks or coverTricks.
   PrimaryOnly = 1
 };
 
