@@ -87,16 +87,44 @@ auto board_value_checks(
 /// Neither stage probes its own zero. V >= 0 always holds, and for base = R*R
 /// stage 1 has already proved V >= base, so those probes are known-true and
 /// skipping them costs nothing.
+///
+/// \param aspiration  The exact V of the previously resolved root card, or -1
+///                    at the first card. Sibling root cards very often resolve
+///                    to the same V - the nil side usually has several cards
+///                    that are equally good, or equally bad - so two probes
+///                    settle the card outright: V >= a and not V >= a+1 is
+///                    exactly V == a, since the predicate is monotone in
+///                    guess. A miss costs two probes and falls through to the
+///                    staged search below, unchanged, so the returned value is
+///                    identical either way. The two probes are not wasted
+///                    either: they warm the transposition table for the staged
+///                    search that follows.
 static auto nil_resolve_value(
   Pos* posPoint,
   const int depth,
   const int childRel,
   const int tricksTotal,
   const bool primaryOnly,
+  const int aspiration,
   SolverContext& ctx) -> int
 {
   const int T = tricksTotal;
   const int R = nil_mode::radix(T);
+
+  // Aspiration probe. Skipped in PrimaryOnly, which is already a single probe
+  // and would only be made slower.
+  if (!primaryOnly && aspiration >= 0)
+  {
+    // V >= 0 holds unconditionally, so the lower probe is known true at 0 and
+    // is not issued - the same reasoning the staged search uses to skip its
+    // own zero probes.
+    const bool atLeast = (aspiration == 0) ||
+      nil_ab_search(posPoint, aspiration, depth, childRel, ctx);
+
+    if (atLeast &&
+        ! nil_ab_search(posPoint, aspiration + 1, depth, childRel, ctx))
+      return aspiration;
+  }
 
   // Stage 1.
   const int base = nil_ab_search(posPoint, R * R, depth, childRel, ctx)
@@ -537,6 +565,12 @@ auto solve_board_nil_internal(
   futp->cards = 0;
   futp->nodes = 0;
 
+  // Exact V of the previously resolved root card, seeding the next card's
+  // aspiration probe. -1 until the first card is resolved. Purely a probe
+  // placement hint: nil_resolve_value falls back to the full staged search
+  // whenever the guess misses, so this cannot change any score written below.
+  int aspiration = -1;
+
   // One invalidation for the whole solve, deliberately outside the root loop.
   //
   // Entries encode G, which is fixed by (deal, nilSeat, direction, trump, T) -
@@ -617,7 +651,7 @@ auto solve_board_nil_internal(
         thrp->nilCoverTricks++;
 
       value = nil_resolve_value(&thrp->lookAheadPos, ini_depth - 1, childRel,
-                                tricksTotal, primaryOnly, ctx);
+                                tricksTotal, primaryOnly, aspiration, ctx);
 
       if (winner == nilSeat)
         thrp->nilTricks--;
@@ -636,7 +670,7 @@ auto solve_board_nil_internal(
         make_2(&thrp->lookAheadPos, ini_depth, &rootMove);
 
       value = nil_resolve_value(&thrp->lookAheadPos, ini_depth - 1, childRel,
-                                tricksTotal, primaryOnly, ctx);
+                                tricksTotal, primaryOnly, aspiration, ctx);
 
       if (hand_rel_first == 0)
         undo_1(&thrp->lookAheadPos, ini_depth, rootMove);
@@ -651,6 +685,8 @@ auto solve_board_nil_internal(
     futp->equals[futp->cards] = rootMove.sequence << 2;
     futp->score[futp->cards] = value;
     futp->cards++;
+
+    aspiration = value;
 
     if (primaryOnly && value >= radix * radix)
     {
