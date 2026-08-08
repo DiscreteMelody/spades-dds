@@ -152,6 +152,10 @@ static auto nil_resolve_value(
 
   const int sC = lo;
 
+#ifdef NIL_DROP_TERTIARY
+  // Tertiary term removed: nothing below the cover count to resolve.
+  return base + R * sC;
+#else
   // Stage 3. Same shape, one term down.
   lo = 0;
   hi = T + 1;
@@ -167,6 +171,7 @@ static auto nil_resolve_value(
   }
 
   return base + R * sC + lo;
+#endif
 }
 
 

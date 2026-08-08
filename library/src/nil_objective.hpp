@@ -85,7 +85,12 @@ constexpr auto pack(
 {
   const int R = radix(tricksTotal);
   const int sC = direct(coverTricks, tricksTotal, m);
+#ifdef NIL_DROP_TERTIARY
+  (void)nilTricks;
+  const int sN = 0;
+#else
   const int sN = direct(nilTricks, tricksTotal, m);
+#endif
   return (nilBroken ? 0 : R * R) + R * sC + sN;
 }
 
@@ -185,13 +190,21 @@ constexpr auto upper_bound(const NodeCounts& c) -> int
   if (!c.m)
     return primary
       + R * clamp(T - c.coverTricks, 0, T)
+#ifdef NIL_DROP_TERTIARY
+      + 0;
+#else
       + clamp(T - c.nilTricks, 0, T);
+#endif
 
   const Split d = split_cover_first(c);
 
   return primary
     + R * clamp(c.coverTricks + d.cover, 0, T)
+#ifdef NIL_DROP_TERTIARY
+    + 0;
+#else
     + clamp(c.nilTricks + d.nil, 0, T);
+#endif
 }
 
 /// \brief Loosest sound lower bound on V from this node - the least the nil side
@@ -212,13 +225,21 @@ constexpr auto lower_bound(const NodeCounts& c) -> int
   if (c.m)
     return primary
       + R * clamp(c.coverTricks, 0, T)
+#ifdef NIL_DROP_TERTIARY
+      + 0;
+#else
       + clamp(c.nilTricks, 0, T);
+#endif
 
   const Split d = split_cover_first(c);
 
   return primary
     + R * clamp(T - (c.coverTricks + d.cover), 0, T)
+#ifdef NIL_DROP_TERTIARY
+    + 0;
+#else
     + clamp(T - (c.nilTricks + d.nil), 0, T);
+#endif
 }
 
 }  // namespace nil_mode

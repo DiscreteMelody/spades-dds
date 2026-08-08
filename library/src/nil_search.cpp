@@ -122,10 +122,18 @@ static auto nil_path_offset(SolverContext& ctx) -> int
   const int n0 = ctx.search().nil_tricks();
   const int c0 = ctx.search().nil_cover_tricks();
 
+#ifdef NIL_DROP_TERTIARY
+  // pack() no longer contributes an sN term, so the path offset must not
+  // subtract one either or G and V* drift apart and the table denormalises.
+  const int K  = R * nil_mode::direct(c0, T, m);
+  const int K0 = R * nil_mode::direct(0, T, m);
+  (void)n0;
+#else
   const int K =
     R * nil_mode::direct(c0, T, m) + nil_mode::direct(n0, T, m);
   const int K0 =
     R * nil_mode::direct(0, T, m) + nil_mode::direct(0, T, m);
+#endif
 
   return K - K0;
 }
