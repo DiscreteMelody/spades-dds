@@ -213,6 +213,12 @@ auto nil_decode_value(
 }
 
 
+void STDCALL SetNilTableMemory(int megabytes)
+{
+  nil_trans_table().set_memory(megabytes);
+}
+
+
 int STDCALL SolveBoardNil(
   DealNil dl,
   int mode,

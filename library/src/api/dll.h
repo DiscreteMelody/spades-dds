@@ -649,6 +649,24 @@ EXTERN_C DLLEXPORT auto STDCALL SolveBoardNil(
   int threadIndex) -> int;
 
 /**
+ * @brief Set the nil transposition table budget, in megabytes.
+ *
+ * The nil table is thread-local and sized independently of the bridge tables
+ * that dds_configure_tt() manages, so it needs its own entry point. Rounded
+ * down to a power of two of slots; values <= 0 are clamped to 1 MB.
+ *
+ * Idempotent: setting the budget already in force is a no-op, so it is safe to
+ * call before every solve. Changing the budget discards the table's contents.
+ *
+ * Default is 96 MB. Measured on random deals, 384 MB cuts search nodes by
+ * roughly 13%% at 11 cards; past that node counts keep falling but wall clock
+ * does not, as the table stops fitting in cache.
+ *
+ * @param megabytes Budget for the calling thread's nil table
+ */
+EXTERN_C DLLEXPORT auto STDCALL SetNilTableMemory(int megabytes) -> void;
+
+/**
  * @brief PBN-format variant of SolveBoardNil.
  */
 EXTERN_C DLLEXPORT auto STDCALL SolveBoardNilPBN(

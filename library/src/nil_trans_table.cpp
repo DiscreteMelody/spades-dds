@@ -36,6 +36,12 @@ auto NilTransTable::set_memory(const int megabytes) -> void
   while ((slots * 2u) * sizeof(Entry) <= budget)
     slots *= 2u;
 
+  // Idempotent. A caller that sets the same budget before every solve must not
+  // pay a full reallocation and clear each time - and must not have its
+  // generation counter reset out from under a sequence of solves.
+  if (slots == table_.size())
+    return;
+
   table_.assign(slots, Entry{});
   mask_ = slots - 1u;
   generation_ = 1;
