@@ -21,6 +21,7 @@
 #include <cstring>
 
 #include "nil_if.hpp"
+#include "nil_trans_table.hpp"
 #include "nil_search.hpp"
 #include "nil_objective.hpp"
 #include "ab_search.hpp"
@@ -535,6 +536,16 @@ auto solve_board_nil_internal(
 
   futp->cards = 0;
   futp->nodes = 0;
+
+  // One invalidation for the whole solve, deliberately outside the root loop.
+  //
+  // Entries encode G, which is fixed by (deal, nilSeat, direction, trump, T) -
+  // all constant here and all varying between solves. Bumping per root card
+  // or per driver stage instead would throw away exactly the reuse that makes
+  // the table worth having: sibling root cards share most of their subtrees,
+  // and the three-stage binary search re-walks the same tree ~10 times with
+  // different guesses, which is what the stored bounds are for.
+  nil_trans_table().new_solve();
 
   for (int mno = 0; mno < noMoves; mno++)
   {

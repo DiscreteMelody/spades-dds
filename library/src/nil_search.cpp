@@ -22,6 +22,7 @@
 
 #include "nil_search.hpp"
 #include "nil_objective.hpp"
+#include "nil_trans_table.hpp"
 #include "ab_search.hpp"
 #include <lookup_tables/lookup_tables.hpp>
 #include <solver_context/solver_context.hpp>
@@ -98,6 +99,35 @@ static auto nil_counts(
   c.nilBroken = ctx.search().nil_already_broken() || (ctx.search().nil_tricks() > 0);
   c.m = ctx.search().nil_direction();
   return c;
+}
+
+
+/// The node's path constant, measured from the value the same position would
+/// have at zero running counts.
+///
+/// V* = G + nil_path_offset(), where G is what the transposition table stores.
+/// Derivation is in nil_trans_table.hpp; the short version is that V splits
+/// into a term fixed by the tricks already banked on this path and a term
+/// fixed by the position below, so subtracting the former leaves something a
+/// table can key on.
+///
+/// K0 is K at n0 = c0 = 0. With m = 1 that is 0; with m = 0 both complements
+/// sit at their maximum, giving R*T + T.
+static auto nil_path_offset(SolverContext& ctx) -> int
+{
+  const int T = ctx.search().nil_tricks_total();
+  const int R = nil_mode::radix(T);
+  const bool m = ctx.search().nil_direction();
+
+  const int n0 = ctx.search().nil_tricks();
+  const int c0 = ctx.search().nil_cover_tricks();
+
+  const int K =
+    R * nil_mode::direct(c0, T, m) + nil_mode::direct(n0, T, m);
+  const int K0 =
+    R * nil_mode::direct(0, T, m) + nil_mode::direct(0, T, m);
+
+  return K - K0;
 }
 
 
@@ -257,6 +287,56 @@ static bool nil_search_0(
     return value >= guess;
   }
 
+  // -------------------------------------------------------------------------
+  // Transposition table.
+  //
+  // Probed after the O(1) arithmetic cutoffs above, which are cheaper than a
+  // hash and a 32-byte compare. Skipped on the last trick, where an entry
+  // costs more to store than the subtree costs to search.
+  //
+  // Placement is safe at every depth here because the root driver in
+  // nil_if.cpp evaluates each root card as an independent sub-search with no
+  // forbidden-move set - so unlike solver_if.cpp's candidate loop, no node
+  // below the root is ever searched under a restricted move set. An entry
+  // therefore always describes the full game below the position.
+  // -------------------------------------------------------------------------
+  const bool ttUsable = (tricks >= 1);
+  const int guessNorm = ttUsable ? (guess - nil_path_offset(ctx)) : 0;
+
+  if (ttUsable)
+  {
+    NilNodeCards const* cardsP = nil_trans_table().lookup(
+      posPoint->rank_in_suit, hand, counts.nilBroken);
+
+    if (cardsP)
+    {
+      const bool resolvesTrue = (cardsP->lower_bound >= guessNorm);
+      const bool resolvesFalse = (cardsP->upper_bound < guessNorm);
+
+      if (resolvesTrue || resolvesFalse)
+      {
+        // win_ranks is restored from the entry for the same reason
+        // ab_search.cpp:290 restores it on a hit: the parent ORs this in and
+        // feeds it to make_next, so returning without setting it would hand
+        // the parent an empty set and suppress its later moves.
+        for (int ss = 0; ss < DDS_SUITS; ss++)
+          posPoint->win_ranks[depth][ss] = cardsP->win_ranks[ss];
+
+        return resolvesTrue;
+      }
+
+      // Bounds too loose for this guess, but the stored move is still the
+      // best one found here under a neighbouring guess. Seeding best_move_tt
+      // is what makes move_gen_0 try it first. Nothing in nil mode wrote this
+      // channel before, so move_gen_0's tt-move argument was inert.
+      if (cardsP->best_move_rank != 0)
+      {
+        ctx.search().best_move_tt(depth).suit = cardsP->best_move_suit;
+        ctx.search().best_move_tt(depth).rank = cardsP->best_move_rank;
+      }
+    }
+  }
+
   bool success = (ctx.search().node_type_store(hand) == MAXNODE ? true : false);
   bool value = !success;
 
@@ -302,6 +382,38 @@ static bool nil_search_0(
   }
 
 ABexit:
+  if (ttUsable)
+  {
+    // A null-window result gives one bound, not a value. `true` means
+    // G >= guessNorm and says nothing about how much higher; `false` means
+    // G <= guessNorm - 1. The opposite side is left open, and add()
+    // intersects with whatever a previous guess established.
+    //
+    // counts.nilBroken and guessNorm were both computed on entry to this
+    // node. The child calls in the loop above adjust nil_tricks() /
+    // nil_cover_tricks() but restore them before returning, so both are
+    // still the values that describe this position.
+    NilNodeCards payload;
+
+    payload.lower_bound = value
+      ? static_cast<short>(guessNorm)
+      : static_cast<short>(-NIL_TT_INF);
+    payload.upper_bound = value
+      ? static_cast<short>(NIL_TT_INF)
+      : static_cast<short>(guessNorm - 1);
+
+    for (int ss = 0; ss < DDS_SUITS; ss++)
+      payload.win_ranks[ss] = posPoint->win_ranks[depth][ss];
+
+    payload.best_move_suit =
+      static_cast<unsigned char>(ctx.search().best_move(depth).suit);
+    payload.best_move_rank =
+      static_cast<unsigned char>(ctx.search().best_move(depth).rank);
+
+    nil_trans_table().add(
+      posPoint->rank_in_suit, hand, counts.nilBroken, tricks + 1, payload);
+  }
+
   return value;
 }
 

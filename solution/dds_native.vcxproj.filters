@@ -87,6 +87,9 @@
     <ClCompile Include="..\library\src\nil_search.cpp">
       <Filter>library\src</Filter>
     </ClCompile>
+    <ClCompile Include="..\library\src\nil_trans_table.cpp">
+      <Filter>library\src</Filter>
+    </ClCompile>
     <ClCompile Include="..\library\src\par.cpp">
       <Filter>library\src</Filter>
     </ClCompile>
@@ -231,6 +234,9 @@
       <Filter>library\src</Filter>
     </ClInclude>
     <ClInclude Include="..\library\src\nil_search.hpp">
+      <Filter>library\src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\library\src\nil_trans_table.hpp">
       <Filter>library\src</Filter>
     </ClInclude>
     <ClInclude Include="..\library\src\pbn.hpp">

@@ -55,3 +55,16 @@ cc_test(
     ],
     copts = DDS_CPPOPTS,
 )
+
+cc_test(
+    name = "mode_regression_test",
+    size = "medium",
+    srcs = [
+        "mode_regression_test.cpp",
+    ],
+    deps = [
+        "//library/src:testable_dds",
+        "@googletest//:gtest_main",
+    ],
+    copts = DDS_CPPOPTS,
+)
