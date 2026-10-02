@@ -65,7 +65,26 @@ struct HeuristicContext
 
     // Leader's card snapshot for targeted helpers.
     int lead0_rank = 0; // trackp->move[0].rank
+
+    // Misère ("shed") ordering flags for this solve (DDS_MISERE_ORDER_*), or
+    // 0 for the classic weight_alloc_* ordering. Moves sets this from the
+    // process-wide setting, and only for misère solves.
+    int misere_order = 0;
+
+    // Whether the "trump must be broken to lead" rule is enforced in this
+    // solve. DDS_MISERE_ORDER_BREAK_TRUMP only applies when it is.
+    bool trump_break_rule = false;
+
+    // Whether this move list is the root's own (the position being solved).
+    bool at_root = false;
 };
+
+/// @brief Set the process-wide misère move-ordering flags.
+/// @param flags DDS_MISERE_ORDER_* bits (see api/dll.h); unknown bits ignored.
+void set_misere_order_flags(int flags);
+
+/// @brief The process-wide misère move-ordering flags.
+auto misere_order_flags() -> int;
 
 /// @brief Apply heuristic sorting to candidate moves in the given context.
 ///

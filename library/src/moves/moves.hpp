@@ -101,6 +101,26 @@ public:
    * unrestricted bridge behaviour exactly. Set once via Init().
    */
   bool trumpBreakRuleOn = false;
+
+  /**
+   * @brief Whether this solve is misère (Deal::misere). Set right after
+   * Init() by the solver context, from ThreadData::misereOn.
+   */
+  bool misereOn = false;
+
+  /**
+   * @brief Misère move-ordering flags read at Init() from the process-wide
+   * setting (SetMisereMoveOrdering). Only used when misereOn is true.
+   */
+  int misereOrder = 0;
+
+  /**
+   * @brief Trick index and relative hand of the root, i.e. the position
+   * passed to the last Init(). Lets the ordering recognise the root's own
+   * move list (DDS_MISERE_ORDER_KEEP_ROOT).
+   */
+  int rootTrick = -1;
+  int rootHandRel = -1;
   /** @brief Suit currently being generated. */
   int suit;
   /** @brief Number of moves currently generated. */

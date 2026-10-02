@@ -231,3 +231,75 @@ else  {
     else
         weight = 14- (rank of card move)
 }
+
+6.	Misère ordering
+
+Everything above assumes the hand to play wants tricks. A misère solve
+(Deal::misere) flips the node types: the side on play becomes MINNODE and the
+other side MAXNODE, while the score is still the side on play's trick count.
+The two sides' tricks always add up to the tricks left, so this means every
+seat minimises its own side's tricks. For those solves call_heuristic hands
+the move list to a separate "shed" ordering (heuristic_sorting.cpp, top of the
+file). Every rule there is written from the mover's point of view and treats
+both partnerships the same way. Maximum-tricks solves never reach it.
+
+The ordering is controlled process-wide by SetMisereMoveOrdering() (dll.h),
+one bit per rule below. DDS_MISERE_ORDER_DEFAULT turns all of them on, and 0
+gives the classic ordering node for node. Results never depend on the setting.
+
+Lead (one suit score plus two per-card terms; the lower card wins ties):
+
+    -5  an opponent is void in the suit (-2 more if both are)
+    +2  partner is void in the suit
+    +1  singleton
+    -1  trump
+    -2  the leader holds four or more cards of the suit
+    -3  the card is the highest card left in the suit
+    -2  the card is lower than every card the other hands hold in the suit
+    killer: the card that last refuted a sibling at this depth goes first
+
+Following suit: cards that do not beat the current winner first, highest
+first; then the cards that do beat it, cheapest first.
+
+Void in the led suit:
+  1. (BREAK_TRUMP) While the trump-must-be-broken rule is enforced and trump
+     is not yet broken, trumps first, highest first.
+  2. (PARTNER_RUFF) If partner holds the trick and no later hand can beat
+     it, the winning ruffs first, highest first.
+  3. Otherwise cards that do not win the trick, highest rank first across
+     suits; then the ruffs, highest first.
+
+Root (KEEP_ROOT): the root's own move list keeps the classic order. Among
+several equally good cards, the search reports the first one the root list
+tries that achieves the value. Whether a root card achieves the value does not
+depend on the order below the root. So the reported card for solutions=1, and
+the card order for solutions=3, stay exactly as they were with the classic
+ordering.
+
+What the measurements say (Spades: spades trump, break rule on, per-card
+scoring with solutions=3; details in the study notes):
+
+  - The classic order is backwards here. On labelled positions it put an
+    optimal card first 37% of the time in misère, against 87% in max mode.
+    Following suit it managed 6-27%. The shed order gets 74%.
+  - Best move is not the same as best move to search first. BREAK_TRUMP
+    lowers the share of optimal first cards at unbroken void nodes from 74%
+    to 44%, but it is the largest single node saving. The transposition
+    table is off until trump is broken, and the shed order otherwise keeps
+    trump unbroken almost to the end. A cut found with a trump is proved in
+    a subtree that has the table. Removing it costs at least +312% nodes on
+    24 held-out 13-card deals (one deal hit the node cap). Without the break
+    rule it costs nodes, so it is gated on the rule.
+  - The lead weights were fitted by coordinate descent on in-solver node
+    counts. Several look odd from the mover's point of view. The void
+    terms mostly measure tree size: a void hand can discard anything. The
+    "lowest card" penalty penalises a card that is often the best lead but
+    expensive to prove.
+  - Overall, on 24 13-card deals: classic at least 26.3G search nodes (5
+    deals stopped at the 5G cap), shed 4.9G. First-move cutoffs went from 68%
+    to 97%.
+
+If the transposition table is ever made usable while trump is unbroken (for
+example by keying it on the broken flag), BREAK_TRUMP should be dropped. In a
+prototype of that table, the shed order without BREAK_TRUMP was 41% fewer
+nodes than with it.

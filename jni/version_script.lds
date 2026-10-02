@@ -21,9 +21,11 @@
     ErrorMessage;
     FreeMemory;
     GetDDSInfo;
+    GetMisereMoveOrdering;
     InitializeStaticMemory;
     Par;
     SetMaxThreads;
+    SetMisereMoveOrdering;
     SetResources;
     SetThreading;
     SidesPar;

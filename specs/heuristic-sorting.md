@@ -1,7 +1,7 @@
 ---
 capability: heuristic-sorting
 owners: [heuristic_sorting]
-last-updated: 2026-07-18
+last-updated: 2026-10-01
 ---
 
 # Heuristic Sorting
@@ -47,6 +47,13 @@ solve.
   both [move-generation](move-generation.md) and the heuristics. `Moves` owns the `track[]` array
   and mutates `trackp`; heuristics read the snapshots copied into
   `HeuristicContext`.
+- **Misère solves have their own ordering.** When the solve is misère
+  (`Deal::misere`), `call_heuristic` hands the list to the "shed" ordering at the
+  top of `heuristic_sorting.cpp`, which is written for a mover who wants to lose
+  tricks. `HeuristicContext::misere_order` carries the
+  `DDS_MISERE_ORDER_*` flags set by `SetMisereMoveOrdering()`. It is 0 for
+  maximum-tricks solves and when the caller turns the ordering off, and 0 means
+  the classic path node for node. See `doc/heuristic-sorting.md` §6.
 - **`testable_heuristic_sorting`** exposes the same sources to the heuristic-sorting
   test packages; behaviour matches `heuristic_sorting`.
 

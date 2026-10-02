@@ -115,6 +115,9 @@ auto Moves::Init(const int tricks, const int relStartHand,
   currTrick = tricks;
   trump = our_trump;
   trumpBreakRuleOn = our_trump_break_rule_on;
+  misereOrder = misere_order_flags();
+  rootTrick = tricks;
+  rootHandRel = relStartHand;
   track[tricks].trumpBroken = trump_already_broken;
 
   if (relStartHand == 0)
@@ -733,6 +736,10 @@ auto Moves::call_heuristic(const Pos &tpos, const MoveType &best_move,
   context.high2 = (trackp ? trackp->high[2] : 0);
   // Leader snapshot
   context.lead0_rank = (trackp ? trackp->move[0].rank : 0);
+  context.misere_order = (misereOn ? misereOrder : 0);
+  context.at_root = (currTrick == rootTrick &&
+    ((currHand - leadHand + DDS_HANDS) % DDS_HANDS) == rootHandRel);
+  context.trump_break_rule = trumpBreakRuleOn;
 
   ::call_heuristic(context);
 }

@@ -1,6 +1,262 @@
+#include <atomic>
+
 #include <heuristic_sorting/internal.hpp>
 #include <utility/constants.h>
 #include <lookup_tables/lookup_tables.hpp>
+
+// ===========================================================================
+// Misère ("shed") move ordering
+// ===========================================================================
+//
+// WHAT MISÈRE MEANS TO THE SEARCH. Deal::misere flips the node types
+// (solve_board_internal): the side on play becomes MINNODE and the other side
+// MAXNODE, while the score stays the side on play's trick count. The two
+// sides' tricks always add up to the tricks left, so this is exactly "every
+// seat minimises its OWN side's tricks". Nothing below needs to know which
+// side is MAXNODE. Every rule is written from the mover's point of view and
+// applies to both partnerships the same way.
+//
+// WHY A SEPARATE ORDERING. The weight_alloc_* family assumes the mover wants
+// the trick: cash winners, win cheaply, ruff, overruff, don't waste partner's
+// trick. Under misère that is close to backwards. On 3,600 labelled positions
+// (2-10 tricks, every legal card scored by solutions=3) the classic order put
+// an optimal card first 37% of the time in misère, against 87% in max mode.
+// Following suit it managed 6-27%, worse than playing the lowest card. This
+// ordering puts an optimal card first 74% of the time.
+//
+// WHAT "FIRST" SHOULD MEAN. The search is a null-window test, so the card
+// worth trying first is the one that cuts the node most cheaply. That is not
+// always the best card. The biggest win here, DDS_MISERE_ORDER_BREAK_TRUMP,
+// usually tries a card a misère player would rather not play. The measurements
+// for each rule are in doc/heuristic-sorting.md ("Misère ordering").
+//
+// The flags are process-wide, read once per solve in Moves::Init, and inert
+// unless the solve is misère. Flags == 0 reproduces the classic ordering node
+// for node.
+
+namespace
+{
+std::atomic<int> g_misere_order{DDS_MISERE_ORDER_DEFAULT};
+
+// Would (suit, rank) be the current winner of the trick once played?
+// hand_rel >= 1. trackp->move[hand_rel - 1] holds the winning card so far.
+inline bool mis_wins_now(
+  const HeuristicContext& ctx,
+  const int hand_rel,
+  const int suit,
+  const int rank)
+{
+  const ExtCard& w = ctx.trackp->move[hand_rel - 1];
+  if (suit == w.suit)
+    return rank > w.rank;
+  return suit == ctx.trump;
+}
+
+// Can any hand still to play after the mover beat the current winner, by
+// rank in the led suit or by a ruff or an overruff?
+bool mis_beatable_later(
+  const HeuristicContext& ctx,
+  const int hand_rel)
+{
+  const ExtCard& w = ctx.trackp->move[hand_rel - 1];
+  const int led = ctx.lead_suit;
+  for (int r = hand_rel + 1; r < DDS_HANDS; r++)
+  {
+    const int h = (ctx.lead_hand + r) & 3;
+    const unsigned short hold = ctx.tpos.rank_in_suit[h][led];
+    if (hold)
+    {
+      if (w.suit == led && highest_rank[hold] > w.rank)
+        return true;
+    }
+    else if (ctx.trump != DDS_NOTRUMP)
+    {
+      const unsigned short tr = ctx.tpos.rank_in_suit[h][ctx.trump];
+      if (tr && (w.suit != ctx.trump || highest_rank[tr] > w.rank))
+        return true;
+    }
+  }
+  return false;
+}
+
+// LEAD. Called once per suit by MoveGen0 (moves last_num_moves..num_moves-1
+// are this suit). A suit score from cheap suit features, plus two per-card
+// terms; the lower card wins ties.
+//
+//   -5  an opponent is void in the suit
+//   -2  both opponents are void (on top of -5)
+//   +2  partner is void
+//   +1  singleton
+//   -1  trump
+//   -2  the leader holds 4+ cards in the suit
+//   -3  (card) it is the highest card left in the suit
+//   -2  (card) it is lower than every card the other hands hold in the suit
+//
+// The void terms are mostly about tree size, not misère strategy. A void
+// hand can discard anything, so its node branches the most. The
+// classic order charges for that as well (its countLH/countRH term). The last
+// term looks backwards: "lead the very lowest card" is often the best
+// misère lead. But the cut it gives is expensive to prove, so the order
+// lets a cheaper card go first. Weights were fitted by coordinate descent on
+// in-solver node counts, then checked on held-out deals (doc).
+void misere_lead(HeuristicContext& ctx)
+{
+  const Pos& tpos = ctx.tpos;
+  const int s = ctx.suit;
+  const int me = ctx.lead_hand;
+  const int len = tpos.length[me][s];
+  const bool lhoVoid = (tpos.length[lho[me]][s] == 0);
+  const bool rhoVoid = (tpos.length[rho[me]][s] == 0);
+
+  unsigned short others = 0;
+  for (int h = 0; h < DDS_HANDS; h++)
+    if (h != me)
+      others |= tpos.rank_in_suit[h][s];
+  const int othersLow = (others ? lowest_rank[others] : 15);
+
+  int suitScore = 0;
+  if (lhoVoid || rhoVoid)
+    suitScore -= 5;
+  if (lhoVoid && rhoVoid)
+    suitScore -= 2;
+  if (tpos.length[partner[me]][s] == 0)
+    suitScore += 2;
+  if (len == 1)
+    suitScore += 1;
+  if (s == ctx.trump)
+    suitScore -= 1;
+  if (len >= 4)
+    suitScore -= 2;
+
+  const bool killer = (ctx.misere_order & DDS_MISERE_ORDER_LEAD_KILLER) != 0;
+
+  for (int k = ctx.last_num_moves; k < ctx.num_moves; k++)
+  {
+    MoveType& m = ctx.mply[k];
+    int score = suitScore;
+    if (tpos.winner[s].rank == m.rank)
+      score -= 3;
+    if (m.rank < othersLow)
+      score -= 2;
+
+    int weight = score * 32 - m.rank;
+
+    // The killer: the card that last refuted a sibling at this depth.
+    if (killer && ctx.best_move.rank > 0 && ctx.best_move.suit == s &&
+        ctx.best_move.rank == m.rank)
+      weight += 2000;
+
+    m.weight = weight;
+  }
+}
+
+// FOLLOWING SUIT. Cards that do not beat the current winner come first,
+// highest first: shed the most dangerous card that is free to shed. Then the
+// cards that do beat it, cheapest first: when the trick is going to be won
+// anyway, keep the high cards out of it.
+void misere_follow(HeuristicContext& ctx, const int hand_rel)
+{
+  for (int k = 0; k < ctx.num_moves; k++)
+  {
+    MoveType& m = ctx.mply[k];
+    if (! mis_wins_now(ctx, hand_rel, m.suit, m.rank))
+      m.weight = 100 + m.rank;
+    else
+      m.weight = 50 - m.rank;
+  }
+}
+
+// VOID IN THE LED SUIT. Called once per suit held (last_num_moves..).
+//
+// 1. BREAK_TRUMP. With the break rule on and trump not yet broken (before
+//    the trick, and nothing on it yet), trumps first, highest first. While
+//    trump is unbroken the transposition table is off, and the shed order
+//    otherwise keeps trump unbroken almost to the end. A cut found with a
+//    trump is proved in a subtree that has the table. This is the largest
+//    single gain at 13 cards. It must apply at every seat: applying it only
+//    to 4th hand cost +136% nodes, and leaving 4th hand out cost +10%.
+//    Without the break rule the table is always on, and the rule cost
+//    nodes, so it is gated on the rule.
+// 2. PARTNER_RUFF. Partner holds the trick and no later hand can beat it:
+//    this side takes the trick whatever it plays, so ruffing (highest trump
+//    first) gets rid of a trump for free.
+// 3. Otherwise cards that do not win the trick, highest rank first across
+//    suits; then the ruffs that would win it, highest first.
+void misere_void(HeuristicContext& ctx, const int hand_rel)
+{
+  const int flags = ctx.misere_order;
+
+  bool breakTrump = false;
+  if ((flags & DDS_MISERE_ORDER_BREAK_TRUMP) && ctx.trump_break_rule &&
+      ctx.trump != DDS_NOTRUMP && ! ctx.trackp->trumpBroken)
+  {
+    breakTrump = true;
+    for (int r = 0; r < hand_rel; r++)
+      if (ctx.trackp->play_suits[r] == ctx.trump)
+        breakTrump = false;   // this trick breaks trump anyway
+  }
+
+  bool partnerSure = false;
+  if (flags & DDS_MISERE_ORDER_PARTNER_RUFF)
+  {
+    const int winRel = ctx.trackp->high[hand_rel - 1];
+    if (((winRel - hand_rel) & 1) == 0)
+      partnerSure = ! mis_beatable_later(ctx, hand_rel);
+  }
+
+  for (int k = ctx.last_num_moves; k < ctx.num_moves; k++)
+  {
+    MoveType& m = ctx.mply[k];
+    const bool wins = mis_wins_now(ctx, hand_rel, m.suit, m.rank);
+    if (breakTrump && m.suit == ctx.trump)
+      m.weight = 200 + m.rank;
+    else if (partnerSure && wins)
+      m.weight = 200 + m.rank;
+    else if (! wins)
+      m.weight = 100 + m.rank;
+    else
+      m.weight = 50 + m.rank;
+  }
+}
+
+// Returns true if the misère ordering handled this move list.
+bool apply_misere_order(const HeuristicContext& cctx, const int hand_rel)
+{
+  if ((cctx.misere_order & DDS_MISERE_ORDER_SHED) == 0)
+    return false;
+
+  // KEEP_ROOT: the root list keeps the classic order. Which of several
+  // equally good cards the solver reports is the first one the root list
+  // tries that achieves the value. Whether a root card achieves it does not
+  // depend on the order below the root. So keeping the root's order keeps
+  // the reported card, and the solutions=3 card order, exactly as before.
+  // On the tuning set it moved total nodes by -0.1%.
+  if ((cctx.misere_order & DDS_MISERE_ORDER_KEEP_ROOT) && cctx.at_root)
+    return false;
+
+  // The helpers mutate weights only, like the weight_alloc_* family.
+  HeuristicContext& ctx = const_cast<HeuristicContext&>(cctx);
+  if (hand_rel == 0)
+    misere_lead(ctx);
+  else if (cctx.tpos.rank_in_suit[cctx.curr_hand][cctx.lead_suit] != 0)
+    misere_follow(ctx, hand_rel);
+  else
+    misere_void(ctx, hand_rel);
+  return true;
+}
+} // namespace
+
+void set_misere_order_flags(int flags)
+{
+  g_misere_order.store(flags & DDS_MISERE_ORDER_DEFAULT,
+    std::memory_order_relaxed);
+}
+
+auto misere_order_flags() -> int
+{
+  return g_misere_order.load(std::memory_order_relaxed);
+}
+
 
 // New overload: accepts a pre-built HeuristicContext. This contains the
 // same inline logic that used to be in the previous function body.
@@ -12,6 +268,10 @@ void call_heuristic(const HeuristicContext& context)
     // Calculate relative position: 1, 2, or 3 based on lead hand
     hand_rel = (context.curr_hand + 4 - context.lead_hand) % 4;
   }
+
+  // Misère solves use their own ordering (see the top of this file).
+  if (context.misere_order != 0 && apply_misere_order(context, hand_rel))
+    return;
 
   // Leading hand (hand_rel == 0) - MoveGen0 logic
   if (hand_rel == 0) {

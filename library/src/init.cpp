@@ -16,6 +16,7 @@
 #include "init.hpp"
 #include <play_analyser.hpp>
 #include <solve_board.hpp>
+#include <heuristic_sorting/heuristic_sorting.hpp>
 #include <lookup_tables/lookup_tables.hpp>
 #include <solver_context/solver_context.hpp>
 #include <system/scheduler.hpp>
@@ -59,6 +60,25 @@ void STDCALL SetMaxThreads(
 {
   (void) userThreads;
   InitializeStaticMemory();
+}
+
+
+/*
+ * Misère move-ordering control. The flags live with the ordering code in
+ * heuristic_sorting.cpp.
+ *
+ * Public API documentation is maintained in the API headers.
+ */
+void STDCALL SetMisereMoveOrdering(
+  int flags)
+{
+  set_misere_order_flags(flags);
+}
+
+
+int STDCALL GetMisereMoveOrdering()
+{
+  return misere_order_flags();
 }
 
 

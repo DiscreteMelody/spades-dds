@@ -207,7 +207,9 @@ struct FutureTricks
  *        side can guarantee itself by force, which is a bound in the
  *        direction each side is trying to avoid under misère. Misère solves
  *        are therefore still somewhat slower than an equivalent
- *        maximum-tricks solve, but not dramatically so.
+ *        maximum-tricks solve. Moves are ordered by a dedicated misère
+ *        ("shed") ordering rather than the classic one, which was written
+ *        for sides that want tricks; see SetMisereMoveOrdering().
  */
 struct Deal
 {
@@ -546,6 +548,63 @@ EXTERN_C DLLEXPORT auto STDCALL SetResources(
  * resources when the context goes out of scope. No explicit cleanup needed.
  */
 EXTERN_C DLLEXPORT auto STDCALL FreeMemory() -> void;
+
+/**
+ * @name Misère move-ordering flags
+ * Bit flags for SetMisereMoveOrdering(). They only affect solves with
+ * Deal::misere != 0; maximum-tricks solves always use the classic ordering.
+ * Move ordering never changes a result, only how fast it is found.
+ * @{
+ */
+/** Shed order: each seat sheds the most dangerous card it can afford to.
+ *  Leads are scored by a few cheap suit features, followers play their
+ *  highest card that loses the trick, and void hands discard their highest
+ *  card that does not win it. Required by the three refinements below. */
+#define DDS_MISERE_ORDER_SHED 0x1
+/** While the trump-must-be-broken rule is enforced and trump is unbroken,
+ *  a hand that is void in the led suit tries its trumps first, highest
+ *  first. The transposition table is off until trump is broken, and a cut
+ *  found with a trump is proved in a subtree that has it. */
+#define DDS_MISERE_ORDER_BREAK_TRUMP 0x2
+/** A void hand whose partner is sure to win the trick tries ruffing first,
+ *  highest trump first. Its side takes the trick whatever it plays, so the
+ *  ruff costs nothing and gets rid of a trump. */
+#define DDS_MISERE_ORDER_PARTNER_RUFF 0x4
+/** The leader tries the card that last caused a cutoff at this depth
+ *  (the killer move) first. */
+#define DDS_MISERE_ORDER_LEAD_KILLER 0x8
+/** The root's own move list keeps the classic order. The search below it
+ *  still uses the misère ordering. Among several equally good cards, the
+ *  search reports the first one the root list tries, so this keeps the
+ *  reported card (solutions 1) and the order of the cards (solutions 3)
+ *  exactly as they were with the classic ordering. It costs nothing
+ *  measurable. */
+#define DDS_MISERE_ORDER_KEEP_ROOT 0x10
+/** Everything above; the setting in force unless changed. */
+#define DDS_MISERE_ORDER_DEFAULT 0x1F
+/** @} */
+
+/**
+ * @brief Choose the move ordering used by misère solves (process-wide).
+ *
+ * @param flags A combination of the DDS_MISERE_ORDER_* flags. 0 restores the
+ *        classic DDS ordering in misère solves exactly (node for node), which
+ *        is useful as a control arm when measuring. Flags other than
+ *        DDS_MISERE_ORDER_SHED have no effect unless it is set. Unknown bits
+ *        are ignored.
+ *
+ * The setting is read when a solve starts, so set it before solving rather
+ * than while other threads are solving. Results never depend on it. It has no
+ * effect on maximum-tricks solves.
+ */
+EXTERN_C DLLEXPORT auto STDCALL SetMisereMoveOrdering(
+  int flags) -> void;
+
+/**
+ * @brief The current misère move-ordering flags (see SetMisereMoveOrdering).
+ * @return The DDS_MISERE_ORDER_* flags in force.
+ */
+EXTERN_C DLLEXPORT auto STDCALL GetMisereMoveOrdering() -> int;
 
 /**
  * @brief Solve a single bridge Deal using double dummy analysis.

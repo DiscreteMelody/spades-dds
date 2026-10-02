@@ -391,6 +391,9 @@ auto SolverContext::MoveGenContext::init(
   thr_->moves.Init(tricks, relStartHand, initialRanks, initialSuits,
                    rank_in_suit, trump, leadHand,
                    trumpBreakRuleOn, trumpAlreadyBroken);
+  // The misère move ordering keys off the objective; solve_board_internal()
+  // has already set misereOn for this solve.
+  thr_->moves.misereOn = thr_->misereOn;
 }
 
 auto SolverContext::MoveGenContext::trump_broken(

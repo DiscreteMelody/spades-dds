@@ -19,9 +19,11 @@ _DealerParBin
 _ErrorMessage
 _FreeMemory
 _GetDDSInfo
+_GetMisereMoveOrdering
 _InitializeStaticMemory
 _Par
 _SetMaxThreads
+_SetMisereMoveOrdering
 _SetResources
 _SetThreading
 _SidesPar
