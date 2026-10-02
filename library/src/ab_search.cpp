@@ -202,11 +202,8 @@ static bool ab_search_0_ctx(
   // here", which depends on whether trump can legally be led - i.e. on
   // whether trump has already been broken. Two positions with identical
   // remaining cards but different trumpBroken status are not equivalent
-  // under the rule, so lookups/stores are only safe once trump is
-  // already broken (a monotonic, permanent state from then on, so this
-  // stays safe for the rest of the search below this node). When the
-  // rule is off, or trump == DDS_NOTRUMP, this is always true and there
-  // is no behavior change whatsoever.
+  // under the rule. When the rule is off, or trump == DDS_NOTRUMP, this
+  // is always true and there is no behavior change whatsoever.
   //
   const bool trumpLeadUnrestricted =
     (!thrp->trumpBreakRuleOn ||
@@ -240,7 +237,36 @@ static bool ab_search_0_ctx(
   // at the table rather than here: solver_if.cpp stamps the table via
   // TransTable::set_objective() before every solve, and the table clears
   // itself on a change. See trans_table.hpp.
-  const bool ttUsable = trumpLeadUnrestricted;
+  //
+  // Trump unbroken under the break rule. The table used to be switched off
+  // here, which is most of a misère search: nobody wants to ruff, so trump
+  // stays unbroken until late. It is now on, with the two kinds of entry
+  // kept apart in the key. ttDist below is hand_dist with bit 12 of
+  // hand_dist[0] set while trump is unbroken. Every table keys its
+  // distribution level on the four 12-bit hand_dist words (TransTableL: the
+  // 48-bit suit-length key and hash8; TransTableS: suit_lengths_), so the bit
+  // makes "unbroken" a different distribution. An unbroken entry can only
+  // match an unbroken position, and a broken one a broken position.
+  //
+  // Within one state an entry is as sound as any other: the rule makes
+  // trump leads legal or not from the broken flag and the leader's suit
+  // lengths alone, both fixed by the key, and never from ranks. So the
+  // win_ranks generalisation, which only merges positions that differ in
+  // ranks below the relevant ones, still merges only equivalent positions.
+  // A table that has stored only broken entries (rule off, or an earlier
+  // solve) is unaffected: those keys never carry the bit.
+  //
+  // QuickTricks/LaterTricks stay off while trump is unbroken. They assume
+  // trump can be led freely, which the key bit does not fix.
+  //
+  // thrp->ttUnbrokenOn (SetUnbrokenTrumpTable) switches this back off as a
+  // control arm; off reproduces the earlier search node for node.
+  const bool ttUsable = trumpLeadUnrestricted || thrp->ttUnbrokenOn;
+  int ttDist[DDS_HANDS] = {
+    posPoint->hand_dist[0], posPoint->hand_dist[1],
+    posPoint->hand_dist[2], posPoint->hand_dist[3] };
+  if (! trumpLeadUnrestricted)
+    ttDist[0] |= 0x1000;
 
   // QuickTricks/LaterTricksMIN/LaterTricksMAX are a different story and stay
   // disabled under misère. They compute a lower bound on the tricks the side
@@ -278,7 +304,7 @@ static bool ab_search_0_ctx(
     TIMER_START(TIMER_NO_LOOKUP, depth);
   NodeCards const * cardsP =
       ctx.trans_table()->lookup(
-        tricks, hand, posPoint->aggr, posPoint->hand_dist,
+        tricks, hand, posPoint->aggr, ttDist,
         limit, lowerFlag);
     TIMER_END(TIMER_NO_LOOKUP, depth);
 
@@ -400,7 +426,7 @@ static bool ab_search_0_ctx(
     TIMER_START(TIMER_NO_LOOKUP, depth);
   NodeCards const * cardsP =
       ctx.trans_table()->lookup(
-        tricks, hand, posPoint->aggr, posPoint->hand_dist,
+        tricks, hand, posPoint->aggr, ttDist,
         limit, lowerFlag);
     TIMER_END(TIMER_NO_LOOKUP, depth);
 

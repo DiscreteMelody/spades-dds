@@ -563,8 +563,10 @@ EXTERN_C DLLEXPORT auto STDCALL FreeMemory() -> void;
 #define DDS_MISERE_ORDER_SHED 0x1
 /** While the trump-must-be-broken rule is enforced and trump is unbroken,
  *  a hand that is void in the led suit tries its trumps first, highest
- *  first. The transposition table is off until trump is broken, and a cut
- *  found with a trump is proved in a subtree that has it. */
+ *  first. Only applies when the table is off for unbroken positions
+ *  (SetUnbrokenTrumpTable(0)). Then a cut found with a trump is proved in a
+ *  subtree that has the table. With the table on (the default) the rule
+ *  costs nodes and stands down. */
 #define DDS_MISERE_ORDER_BREAK_TRUMP 0x2
 /** A void hand whose partner is sure to win the trick tries ruffing first,
  *  highest trump first. Its side takes the trick whatever it plays, so the
@@ -599,6 +601,32 @@ EXTERN_C DLLEXPORT auto STDCALL FreeMemory() -> void;
  */
 EXTERN_C DLLEXPORT auto STDCALL SetMisereMoveOrdering(
   int flags) -> void;
+
+/**
+ * @brief Use the transposition table while trump is unbroken (process-wide).
+ *
+ * With Deal::enforceTrumpBreak set, a position where trump is not yet broken
+ * is a different game from the same cards with trump broken, because trump
+ * cannot be led. The table used to be switched off until trump was broken.
+ * It is now on, with unbroken-trump entries keyed apart from broken ones, so
+ * an entry is only ever reused for a position in the same state.
+ *
+ * @param enable Non-zero (the default) uses the table while trump is
+ *        unbroken. 0 restores the earlier behaviour exactly, node for node,
+ *        which is useful as a control arm when measuring.
+ *
+ * Read when a solve starts. Results never depend on it. Without the
+ * trump-break rule, or in no-trump, it has no effect.
+ */
+EXTERN_C DLLEXPORT auto STDCALL SetUnbrokenTrumpTable(
+  int enable) -> void;
+
+/**
+ * @brief Whether the table is used while trump is unbroken
+ *        (see SetUnbrokenTrumpTable).
+ * @return 1 if on, 0 if off.
+ */
+EXTERN_C DLLEXPORT auto STDCALL GetUnbrokenTrumpTable() -> int;
 
 /**
  * @brief The current misère move-ordering flags (see SetMisereMoveOrdering).

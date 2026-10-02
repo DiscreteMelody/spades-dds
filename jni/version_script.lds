@@ -22,12 +22,14 @@
     FreeMemory;
     GetDDSInfo;
     GetMisereMoveOrdering;
+    GetUnbrokenTrumpTable;
     InitializeStaticMemory;
     Par;
     SetMaxThreads;
     SetMisereMoveOrdering;
     SetResources;
     SetThreading;
+    SetUnbrokenTrumpTable;
     SidesPar;
     SidesParBin;
     SolveAllBoards;

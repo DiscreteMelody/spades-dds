@@ -169,14 +169,18 @@ void misere_follow(HeuristicContext& ctx, const int hand_rel)
 // VOID IN THE LED SUIT. Called once per suit held (last_num_moves..).
 //
 // 1. BREAK_TRUMP. With the break rule on and trump not yet broken (before
-//    the trick, and nothing on it yet), trumps first, highest first. While
-//    trump is unbroken the transposition table is off, and the shed order
-//    otherwise keeps trump unbroken almost to the end. A cut found with a
-//    trump is proved in a subtree that has the table. This is the largest
-//    single gain at 13 cards. It must apply at every seat: applying it only
-//    to 4th hand cost +136% nodes, and leaving 4th hand out cost +10%.
-//    Without the break rule the table is always on, and the rule cost
-//    nodes, so it is gated on the rule.
+//    the trick, and nothing on it yet), trumps first, highest first. This
+//    only applies when the transposition table is OFF while trump is
+//    unbroken (SetUnbrokenTrumpTable(0)). Then the shed order would keep
+//    trump unbroken almost to the end, and the whole tree would run without
+//    a table. A cut found with a trump is proved in a subtree that has one.
+//    With that table off it was the largest single gain at 13 cards. It had
+//    to apply at every seat: only 4th hand cost +136% nodes, and leaving 4th
+//    hand out cost +10%.
+//    With the table on while unbroken (the default), the rule has no reason
+//    to exist, and it cost nodes. On 48 13-card deals, table on: keeping the
+//    rule 858.6M trick nodes / 381 s, dropping it 683.7M / 300 s. So it stands
+//    down then, as it does without the break rule.
 // 2. PARTNER_RUFF. Partner holds the trick and no later hand can beat it:
 //    this side takes the trick whatever it plays, so ruffing (highest trump
 //    first) gets rid of a trump for free.
@@ -188,6 +192,7 @@ void misere_void(HeuristicContext& ctx, const int hand_rel)
 
   bool breakTrump = false;
   if ((flags & DDS_MISERE_ORDER_BREAK_TRUMP) && ctx.trump_break_rule &&
+      ! ctx.tt_unbroken &&
       ctx.trump != DDS_NOTRUMP && ! ctx.trackp->trumpBroken)
   {
     breakTrump = true;

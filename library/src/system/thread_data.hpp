@@ -61,6 +61,13 @@ struct ThreadData
   // why this needs to be tracked separately from nodeTypeStore.
   bool misereOn = false;
 
+  // Whether the transposition table is used while trump is unbroken under
+  // the trump-break rule (SetUnbrokenTrumpTable()). Copied from the
+  // process-wide setting at the start of solve_board_internal(), so one
+  // solve sees one value. See ab_search_0_ctx() for how the entries are
+  // kept apart from the broken-trump ones.
+  bool ttUnbrokenOn = true;
+
   // Parity (hand & 1) of the reference side - the partnership containing
   // whichever hand is on play at the start of the solve - fixed for the
   // whole solve regardless of misereOn. Used by

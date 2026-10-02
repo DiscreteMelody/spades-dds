@@ -77,6 +77,11 @@ struct HeuristicContext
 
     // Whether this move list is the root's own (the position being solved).
     bool at_root = false;
+
+    // Whether the transposition table is on while trump is unbroken
+    // (SetUnbrokenTrumpTable). DDS_MISERE_ORDER_BREAK_TRUMP only exists to
+    // reach the table sooner, so it stands down when this is true.
+    bool tt_unbroken = false;
 };
 
 /// @brief Set the process-wide misère move-ordering flags.

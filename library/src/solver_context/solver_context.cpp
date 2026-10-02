@@ -394,6 +394,7 @@ auto SolverContext::MoveGenContext::init(
   // The misère move ordering keys off the objective; solve_board_internal()
   // has already set misereOn for this solve.
   thr_->moves.misereOn = thr_->misereOn;
+  thr_->moves.ttUnbrokenOn = thr_->ttUnbrokenOn;
 }
 
 auto SolverContext::MoveGenContext::trump_broken(

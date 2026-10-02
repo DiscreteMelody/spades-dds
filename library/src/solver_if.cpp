@@ -7,6 +7,8 @@
    See LICENSE and README.
 */
 
+#include <atomic>
+
 #include <ab_search.hpp>
 #include <dump.hpp>
 #include <init.hpp>
@@ -64,6 +66,24 @@ void (* Make_ptr_list[3])(
   const int depth,
   MoveType const * mply)
   = { make_0, make_1, make_2 };
+
+
+// Process-wide switch for the transposition table while trump is unbroken
+// (see ab_search_0_ctx). On by default; SetUnbrokenTrumpTable(0) restores the
+// earlier behaviour (no table until trump is broken) node for node.
+static std::atomic<bool> g_unbroken_trump_table{true};
+
+void STDCALL SetUnbrokenTrumpTable(
+  int enable)
+{
+  g_unbroken_trump_table.store(enable != 0, std::memory_order_relaxed);
+}
+
+
+int STDCALL GetUnbrokenTrumpTable()
+{
+  return g_unbroken_trump_table.load(std::memory_order_relaxed) ? 1 : 0;
+}
 
 
 int STDCALL SolveBoard(
@@ -156,6 +176,7 @@ auto solve_board_internal(
   thrp->trump = dl.trump;
   thrp->trumpBreakRuleOn = (dl.enforceTrumpBreak != 0);
   thrp->misereOn = (dl.misere != 0);
+  thrp->ttUnbrokenOn = g_unbroken_trump_table.load(std::memory_order_relaxed);
   ctx.search().ini_depth() = cardCount - 4;
   int ini_depth = ctx.search().ini_depth();
   int trick = (ini_depth + 3) >> 2;

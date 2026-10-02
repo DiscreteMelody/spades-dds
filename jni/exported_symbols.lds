@@ -20,12 +20,14 @@ _ErrorMessage
 _FreeMemory
 _GetDDSInfo
 _GetMisereMoveOrdering
+_GetUnbrokenTrumpTable
 _InitializeStaticMemory
 _Par
 _SetMaxThreads
 _SetMisereMoveOrdering
 _SetResources
 _SetThreading
+_SetUnbrokenTrumpTable
 _SidesPar
 _SidesParBin
 _SolveAllBoards

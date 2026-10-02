@@ -68,3 +68,16 @@ cc_test(
     ],
     copts = DDS_CPPOPTS,
 )
+
+cc_test(
+    name = "unbroken_trump_table_test",
+    size = "small",
+    srcs = [
+        "unbroken_trump_table_test.cpp",
+    ],
+    deps = [
+        "//library/src:testable_dds",
+        "@googletest//:gtest_main",
+    ],
+    copts = DDS_CPPOPTS,
+)

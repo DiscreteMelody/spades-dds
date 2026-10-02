@@ -206,7 +206,13 @@ class TransTable
     /// \param trick Current trick number (0-12)
     /// \param hand Current hand to play (0-3)
     /// \param aggr_target Aggregated targets per suit (4 values, one per suit)
-    /// \param hand_dist Card distribution for each hand (4 values)
+    /// \param hand_dist Card distribution for each hand (4 values): the
+    ///        12-bit suit-length words of Pos::hand_dist, plus one flag bit.
+    ///        Bit 12 of hand_dist[0] is set by ab_search_0_ctx while trump
+    ///        is unbroken under the trump-break rule. Implementations must
+    ///        key on every bit they are given (both do: TransTableL's 48-bit
+    ///        suit-length key and hash8, TransTableS's suit_lengths_), so
+    ///        broken and unbroken positions never share an entry.
     /// \param limit Threshold for early termination, interpreted for the
     ///              side to move at this node
     /// \param[out] lower_flag Set to true if result is a lower bound

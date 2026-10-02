@@ -121,6 +121,13 @@ public:
    */
   int rootTrick = -1;
   int rootHandRel = -1;
+
+  /**
+   * @brief Whether the transposition table is on while trump is unbroken
+   * in this solve (ThreadData::ttUnbrokenOn). Set right after Init() by the
+   * solver context.
+   */
+  bool ttUnbrokenOn = false;
   /** @brief Suit currently being generated. */
   int suit;
   /** @brief Number of moves currently generated. */

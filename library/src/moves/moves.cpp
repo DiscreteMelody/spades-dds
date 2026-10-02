@@ -740,6 +740,7 @@ auto Moves::call_heuristic(const Pos &tpos, const MoveType &best_move,
   context.at_root = (currTrick == rootTrick &&
     ((currHand - leadHand + DDS_HANDS) % DDS_HANDS) == rootHandRel);
   context.trump_break_rule = trumpBreakRuleOn;
+  context.tt_unbroken = ttUnbrokenOn;
 
   ::call_heuristic(context);
 }

@@ -263,7 +263,9 @@ first; then the cards that do beat it, cheapest first.
 
 Void in the led suit:
   1. (BREAK_TRUMP) While the trump-must-be-broken rule is enforced and trump
-     is not yet broken, trumps first, highest first.
+     is not yet broken, trumps first, highest first. This applies only when
+     the table is switched off for unbroken positions
+     (SetUnbrokenTrumpTable(0)); see below.
   2. (PARTNER_RUFF) If partner holds the trick and no later hand can beat
      it, the winning ruffs first, highest first.
   3. Otherwise cards that do not win the trick, highest rank first across
@@ -284,12 +286,12 @@ scoring with solutions=3; details in the study notes):
     Following suit it managed 6-27%. The shed order gets 74%.
   - Best move is not the same as best move to search first. BREAK_TRUMP
     lowers the share of optimal first cards at unbroken void nodes from 74%
-    to 44%, but it is the largest single node saving. The transposition
-    table is off until trump is broken, and the shed order otherwise keeps
-    trump unbroken almost to the end. A cut found with a trump is proved in
-    a subtree that has the table. Removing it costs at least +312% nodes on
-    24 held-out 13-card deals (one deal hit the node cap). Without the break
-    rule it costs nodes, so it is gated on the rule.
+    to 44%. With the table off while trump is unbroken (how it was when the
+    ordering was written), it was the largest single node saving. The shed
+    order otherwise keeps trump unbroken almost to the end, and a cut found
+    with a trump is proved in a subtree that has the table. Removing it then
+    cost at least +312% nodes on 24 held-out 13-card deals (one deal hit the
+    node cap).
   - The lead weights were fitted by coordinate descent on in-solver node
     counts. Several look odd from the mover's point of view. The void
     terms mostly measure tree size: a void hand can discard anything. The
@@ -299,7 +301,8 @@ scoring with solutions=3; details in the study notes):
     deals stopped at the 5G cap), shed 4.9G. First-move cutoffs went from 68%
     to 97%.
 
-If the transposition table is ever made usable while trump is unbroken (for
-example by keying it on the broken flag), BREAK_TRUMP should be dropped. In a
-prototype of that table, the shed order without BREAK_TRUMP was 41% fewer
-nodes than with it.
+The transposition table is now used while trump is unbroken, keyed apart from
+broken positions (ab_search_0_ctx, SetUnbrokenTrumpTable). With it,
+BREAK_TRUMP is a cost, so it stands down whenever that table is on, just as
+it does without the break rule. On 48 13-card deals, table on: keeping
+BREAK_TRUMP 858.6M trick nodes / 381 s, dropping it 683.7M / 300 s.

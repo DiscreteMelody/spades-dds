@@ -1,7 +1,7 @@
 ---
 capability: transposition-table
 owners: [trans_table]
-last-updated: 2026-07-18
+last-updated: 2026-10-02
 ---
 
 # Transposition Table
@@ -30,6 +30,13 @@ its two concrete strategies, trading memory against speed.
   harvesting, and `TransTableS` (small) is the pool-based, lower-memory, somewhat
   slower table. Which one a context uses is chosen by `TTKind::{Large,Small}` in
   `SolverConfig` (default `Large`) — see [solver-context](solver-context.md).
+- **Trump-break state is part of the key.** Under `Deal::enforceTrumpBreak`, a
+  position with trump unbroken is a different game from the same cards with
+  trump broken. `ab_search_0_ctx` sets bit 12 of the `hand_dist[0]` it passes
+  to `lookup()` while trump is unbroken. Both implementations key their
+  distribution level on the four 12-bit `hand_dist` words, so the two states
+  never share an entry. `SetUnbrokenTrumpTable(0)` restores the earlier rule:
+  no table at all while trump is unbroken.
 - **Not thread-safe.** A table instance must be accessed from a single solver
   thread. Concurrency comes from one table per context/worker, never a shared
   table under a lock.
