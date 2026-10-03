@@ -42,6 +42,9 @@ static auto boards_from_pbn(
     bo.target[k] = bop.target[k];
     bo.deals[k].first = bop.deals[k].first;
     bo.deals[k].trump = bop.deals[k].trump;
+    bo.deals[k].enforceTrumpBreak = bop.deals[k].enforceTrumpBreak;
+    bo.deals[k].trumpAlreadyBroken = bop.deals[k].trumpAlreadyBroken;
+    bo.deals[k].misere = bop.deals[k].misere;
 
     for (int i = 0; i <= 2; i++)
     {
@@ -356,6 +359,12 @@ auto same_board(
   if (bds.deals[index1].first != bds.deals[index2].first)
     return false;
   if (bds.deals[index1].trump != bds.deals[index2].trump)
+    return false;
+  if (bds.deals[index1].enforceTrumpBreak != bds.deals[index2].enforceTrumpBreak)
+    return false;
+  if (bds.deals[index1].trumpAlreadyBroken != bds.deals[index2].trumpAlreadyBroken)
+    return false;
+  if (bds.deals[index1].misere != bds.deals[index2].misere)
     return false;
 
   for (int k = 0; k < 3; k++)

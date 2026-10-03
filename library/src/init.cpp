@@ -234,8 +234,6 @@ void SetDealTables(
   SolverContext& ctx)
 {
   auto thrp = ctx.thread();
-  unsigned int topBitRank = 1;
-  unsigned int topBitNo = 2;
 
   // Initialization of the rel structure is inspired by
   // a solution given by Thomas Andrews.
@@ -275,37 +273,89 @@ void SetDealTables(
     }
   }
 
+  // The remaining cards of each suit at the root. The search only removes
+  // cards, so every suit holding it ever looks up in rel[] or in the
+  // transposition table's per-deal tables is a subset of these.
+  unsigned short holdings[DDS_SUITS];
+  for (int s = 0; s < DDS_SUITS; s++)
   {
-    ctx.trans_table()->init(handLookup);
+    holdings[s] = 0;
+    for (int h = 0; h < DDS_HANDS; h++)
+      holdings[s] = static_cast<unsigned short>(holdings[s] | thrp->suit[h][s]);
   }
 
-  RelRanksType * relp;
-  for (unsigned int aggr = 1; aggr < 8192; aggr++)
   {
-    if (aggr >= (topBitRank << 1))
-    {
-      /* Next top bit */
-      topBitRank <<= 1;
-      topBitNo++;
-    }
+    ctx.trans_table()->init_for_holdings(handLookup, holdings);
+  }
 
-    thrp->rel[aggr] = thrp->rel[aggr ^ topBitRank];
-    relp = &thrp->rel[aggr];
+  // rel[aggr].abs_rank[..][s] is only ever read for holdings aggr of suit s,
+  // so for a small position it is built per suit, for the subsets of that
+  // suit's holding only, in increasing order. Each entry comes from the
+  // entry without its top card (a smaller subset) exactly as in the loop
+  // over all 8192 holdings, so every entry that is read has the same
+  // value. When the subsets are about as many as all holdings (a full or
+  // nearly full deal) the single pass over all holdings is cheaper and is
+  // kept.
+  unsigned subsets = 0;
+  for (int s = 0; s < DDS_SUITS; s++)
+    subsets += 1u << count_table[holdings[s] & 0x1fff];
 
-    int weight = count_table[aggr];
-    for (int c = weight; c >= 2; c--)
+  if (subsets >= 8192)
+  {
+    unsigned int topBitRank = 1;
+    unsigned int topBitNo = 2;
+    RelRanksType * relp;
+    for (unsigned int aggr = 1; aggr < 8192; aggr++)
     {
+      if (aggr >= (topBitRank << 1))
+      {
+        /* Next top bit */
+        topBitRank <<= 1;
+        topBitNo++;
+      }
+
+      thrp->rel[aggr] = thrp->rel[aggr ^ topBitRank];
+      relp = &thrp->rel[aggr];
+
+      int weight = count_table[aggr];
+      for (int c = weight; c >= 2; c--)
+      {
+        for (int s = 0; s < DDS_SUITS; s++)
+        {
+          relp->abs_rank[c][s].hand = relp->abs_rank[c - 1][s].hand;
+          relp->abs_rank[c][s].rank = relp->abs_rank[c - 1][s].rank;
+        }
+      }
       for (int s = 0; s < DDS_SUITS; s++)
       {
-        relp->abs_rank[c][s].hand = relp->abs_rank[c - 1][s].hand;
-        relp->abs_rank[c][s].rank = relp->abs_rank[c - 1][s].rank;
+        relp->abs_rank[1][s].hand =
+          static_cast<signed char>(handLookup[s][topBitNo]);
+        relp->abs_rank[1][s].rank = static_cast<char>(topBitNo);
       }
     }
+  }
+  else
+  {
     for (int s = 0; s < DDS_SUITS; s++)
     {
-      relp->abs_rank[1][s].hand =
-        static_cast<signed char>(handLookup[s][topBitNo]);
-      relp->abs_rank[1][s].rank = static_cast<char>(topBitNo);
+      const unsigned full = holdings[s] & 0x1fffu;
+      for (unsigned aggr = (0u - full) & full; aggr != 0;
+           aggr = (aggr - full) & full)
+      {
+        const int top = highest_rank[aggr];
+        AbsRankType * dst = &thrp->rel[aggr].abs_rank[0][0];
+        const AbsRankType * src =
+          &thrp->rel[aggr ^ bit_map_rank[top]].abs_rank[0][0];
+        for (int c = 0; c < 15; c++)
+          dst[c * DDS_SUITS + s] = src[c * DDS_SUITS + s];
+
+        const int weight = count_table[aggr];
+        AbsRankType (* ar)[DDS_SUITS] = thrp->rel[aggr].abs_rank;
+        for (int c = weight; c >= 2; c--)
+          ar[c][s] = ar[c - 1][s];
+        ar[1][s].hand = static_cast<signed char>(handLookup[s][top]);
+        ar[1][s].rank = static_cast<char>(top);
+      }
     }
   }
 }
@@ -331,6 +381,20 @@ void InitWinners(
     startMovesBitMap[hand][suit] |= bit_map_rank[rank];
   }
 
+  // The top two cards of each suit among the hands and the current trick,
+  // with the values rel[aggr].abs_rank[1..2] would give: the holding hand,
+  // or hand 0 for a card that is already in the trick (rel's lookup has no
+  // other answer for it), and hand -1 / rank 0 when there is no such card.
+  // Computed directly because rel[] is only built for the hands' holdings
+  // (see SetDealTables), and aggr here also has the trick's cards.
+  auto owner = [&thrp](const int s, const int r) -> int
+  {
+    for (int h = 0; h < DDS_HANDS; h++)
+      if (thrp->suit[h][s] & bit_map_rank[r])
+        return h;
+    return 0;
+  };
+
   int aggr;
   for (int s = 0; s < DDS_SUITS; s++)
   {
@@ -338,10 +402,29 @@ void InitWinners(
     for (int h = 0; h < DDS_HANDS; h++)
       aggr |= startMovesBitMap[h][s] | thrp->suit[h][s];
 
-    posPoint.winner[s].rank = thrp->rel[aggr].abs_rank[1][s].rank;
-    posPoint.winner[s].hand = thrp->rel[aggr].abs_rank[1][s].hand;
-    posPoint.second_best[s].rank = thrp->rel[aggr].abs_rank[2][s].rank;
-    posPoint.second_best[s].hand = thrp->rel[aggr].abs_rank[2][s].hand;
+    if (aggr == 0)
+    {
+      posPoint.winner[s].rank = 0;
+      posPoint.winner[s].hand = -1;
+      posPoint.second_best[s].rank = 0;
+      posPoint.second_best[s].hand = -1;
+      continue;
+    }
+    const int r1 = highest_rank[aggr];
+    posPoint.winner[s].rank = r1;
+    posPoint.winner[s].hand = owner(s, r1);
+    const int rest = aggr ^ bit_map_rank[r1];
+    if (rest == 0)
+    {
+      posPoint.second_best[s].rank = 0;
+      posPoint.second_best[s].hand = -1;
+    }
+    else
+    {
+      const int r2 = highest_rank[rest];
+      posPoint.second_best[s].rank = r2;
+      posPoint.second_best[s].hand = owner(s, r2);
+    }
   }
 }
 

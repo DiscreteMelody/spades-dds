@@ -3,5 +3,6 @@
 public enum TTKind : int
 {
     Small = 0,
-    Large = 1
+    Large = 1,
+    Pattern = 2
 }

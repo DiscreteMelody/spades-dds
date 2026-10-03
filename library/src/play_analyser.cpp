@@ -267,6 +267,7 @@ int STDCALL AnalysePlayPBN(
   dl.trump = dlPBN.trump;
   dl.enforceTrumpBreak = dlPBN.enforceTrumpBreak;
   dl.trumpAlreadyBroken = dlPBN.trumpAlreadyBroken;
+  dl.misere = dlPBN.misere;
   for (int i = 0; i <= 2; i++)
   {
     dl.currentTrickSuit[i] = dlPBN.currentTrickSuit[i];
@@ -341,6 +342,9 @@ int STDCALL AnalyseAllPlaysPBN(
 
     dl.trump = dlp.trump;
     dl.first = dlp.first;
+    dl.enforceTrumpBreak = dlp.enforceTrumpBreak;
+    dl.trumpAlreadyBroken = dlp.trumpAlreadyBroken;
+    dl.misere = dlp.misere;
 
     for (int i = 0; i <= 2; i++)
     {

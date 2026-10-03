@@ -99,6 +99,7 @@
     <ClCompile Include="..\library\src\system\time_stat.cpp" />
     <ClCompile Include="..\library\src\system\time_stat_list.cpp" />
     <ClCompile Include="..\library\src\trans_table\trans_table_l.cpp" />
+    <ClCompile Include="..\library\src\trans_table\trans_table_p.cpp" />
     <ClCompile Include="..\library\src\trans_table\trans_table_s.cpp" />
     <ClCompile Include="..\library\src\utility\constants.cpp" />
   </ItemGroup>
@@ -146,6 +147,7 @@
     <ClInclude Include="..\library\src\system\util\utilities.hpp" />
     <ClInclude Include="..\library\src\trans_table\trans_table.hpp" />
     <ClInclude Include="..\library\src\trans_table\trans_table_l.hpp" />
+    <ClInclude Include="..\library\src\trans_table\trans_table_p.hpp" />
     <ClInclude Include="..\library\src\trans_table\trans_table_s.hpp" />
     <ClInclude Include="..\library\src\utility\constants.h" />
     <ClInclude Include="..\library\src\utility\debug.h" />

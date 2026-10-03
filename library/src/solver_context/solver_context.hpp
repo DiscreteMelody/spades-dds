@@ -19,7 +19,9 @@
 
 // Minimal configuration scaffold for future expansion.
 // TT configuration without depending on Memory headers.
-enum class TTKind { Small, Large };
+// Pattern (TransTableP, the shape -> relative-rank pattern table ported from
+// upstream DDS) is the default; Large is the earlier paged TransTableL.
+enum class TTKind { Small = 0, Large = 1, Pattern = 2 };
 
 /**
  * @brief Configuration options for SolverContext instances.
@@ -30,7 +32,7 @@ enum class TTKind { Small, Large };
  */
 struct SolverConfig
 {
-  TTKind tt_kind_ = TTKind::Large;
+  TTKind tt_kind_ = TTKind::Pattern;
   int tt_mem_default_mb_ = 0;
   int tt_mem_maximum_mb_ = 0;
 };

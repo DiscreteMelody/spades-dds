@@ -11,7 +11,7 @@ public struct SolverConfig
 
     public SolverConfig()
     {
-        TTKind = TTKind.Large;
+        TTKind = TTKind.Pattern;
     }
 
     public SolverConfig(TTKind tTKind, int defaultMemoryMB, int maximumMemoryMB)

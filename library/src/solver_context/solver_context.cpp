@@ -11,6 +11,7 @@
 #include <api/dds.h>
 //#include <api/dds_api.hpp>
 #include <trans_table/trans_table_l.hpp>
+#include <trans_table/trans_table_p.hpp>
 #include <trans_table/trans_table_s.hpp>
 #include <utility/debug.h>
 
@@ -66,8 +67,8 @@ auto SolverContext::trans_table() const -> TransTable*
 auto SolverContext::SearchContext::trans_table() -> TransTable* {
   if (tt_) return tt_.get();
   // Require owner (for config and utilities). If missing, fall back
-  // to Large with built-in defaults.
-  TTKind kind = (owner_ ? owner_->config().tt_kind_ : TTKind::Large);
+  // to Pattern with built-in defaults.
+  TTKind kind = (owner_ ? owner_->config().tt_kind_ : TTKind::Pattern);
   int defMB = (owner_ ? owner_->config().tt_mem_default_mb_ : 0);
   int maxMB = (owner_ ? owner_->config().tt_mem_maximum_mb_ : 0);
   // Final fallback to THREADMEM_* constants
@@ -94,6 +95,8 @@ auto SolverContext::SearchContext::trans_table() -> TransTable* {
   // Create appropriate concrete table
   if (kind == TTKind::Small)
     tt_ = std::unique_ptr<TransTable>(new TransTableS());
+  else if (kind == TTKind::Pattern)
+    tt_ = std::unique_ptr<TransTable>(new TransTableP());
   else
     tt_ = std::unique_ptr<TransTable>(new TransTableL());
 
@@ -103,7 +106,8 @@ auto SolverContext::SearchContext::trans_table() -> TransTable* {
 
 #ifdef DDS_UTILITIES_LOG
   {
-    const char kch = (kind == TTKind::Small ? 'S' : 'L');
+    const char kch = (kind == TTKind::Small ? 'S' :
+                      (kind == TTKind::Pattern ? 'P' : 'L'));
     char buf[96];
     std::snprintf(buf, sizeof(buf), "tt:create|%c|%d|%d", kch, defMB, maxMB);
     if (owner_) owner_->utilities().log_append(std::string(buf));
@@ -118,7 +122,8 @@ auto SolverContext::SearchContext::trans_table() -> TransTable* {
   if (const char* dbg = std::getenv("DDS_DEBUG_TT_CREATE")) {
     if (*dbg) {
       std::cerr << "[DDS] TT create: kind="
-                << (kind == TTKind::Small ? 'S' : 'L')
+                << (kind == TTKind::Small ? 'S' :
+                    (kind == TTKind::Pattern ? 'P' : 'L'))
                 << " defMB=" << defMB
                 << " maxMB=" << maxMB
                 << std::endl;
@@ -239,8 +244,11 @@ auto SolverContext::configure_tt(TTKind kind, int defMB, int maxMB) -> void
   if (!tt) return; // Nothing to apply now; will take effect on lazy creation.
 
   // If kind changes, dispose and recreate now to ensure effect is applied.
-  bool is_small = (dynamic_cast<TransTableS*>(tt) != nullptr);
-  TTKind current_kind = is_small ? TTKind::Small : TTKind::Large;
+  TTKind current_kind = TTKind::Large;
+  if (dynamic_cast<TransTableS*>(tt) != nullptr)
+    current_kind = TTKind::Small;
+  else if (dynamic_cast<TransTableP*>(tt) != nullptr)
+    current_kind = TTKind::Pattern;
   if (current_kind != kind) {
     dispose_trans_table();
     // Force immediate creation with new config to keep behavior explicit.

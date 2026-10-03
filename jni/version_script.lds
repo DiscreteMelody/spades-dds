@@ -22,12 +22,14 @@
     FreeMemory;
     GetDDSInfo;
     GetMisereMoveOrdering;
+    GetSearchFeatures;
     GetUnbrokenTrumpTable;
     InitializeStaticMemory;
     Par;
     SetMaxThreads;
     SetMisereMoveOrdering;
     SetResources;
+    SetSearchFeatures;
     SetThreading;
     SetUnbrokenTrumpTable;
     SidesPar;

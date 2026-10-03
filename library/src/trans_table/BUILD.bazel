@@ -5,11 +5,13 @@ cc_library(
     name = "trans_table",
     srcs = [
         "trans_table_l.cpp",
+        "trans_table_p.cpp",
         "trans_table_s.cpp",
     ],
     hdrs = [
         "trans_table.hpp",
         "trans_table_l.hpp",
+        "trans_table_p.hpp",
         "trans_table_s.hpp",
     ],
     visibility = ["//visibility:public"],
@@ -28,11 +30,13 @@ cc_library(
     name = "testable_trans_table",
     srcs = [
         "trans_table_l.cpp",
+        "trans_table_p.cpp",
         "trans_table_s.cpp",
     ],
     hdrs = [
         "trans_table.hpp",
         "trans_table_l.hpp",
+        "trans_table_p.hpp",
         "trans_table_s.hpp",
     ],
     copts = DDS_CPPOPTS,

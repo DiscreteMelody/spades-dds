@@ -115,6 +115,18 @@ class TransTable
     /// \pre hand_lookup must be a valid [DDS_SUITS][15] array
     virtual auto init(const int hand_lookup[][15]) -> void = 0;
 
+    /// Like init(), for a deal whose remaining cards per suit are
+    /// `holdings` (13-bit masks): the search only ever presents subsets of
+    /// these, so a table may restrict its per-deal set-up to them. The
+    /// default builds everything.
+    virtual auto init_for_holdings(
+      const int hand_lookup[][15],
+      const unsigned short holdings[]) -> void
+    {
+      (void) holdings;
+      init(hand_lookup);
+    }
+
     /// \brief Set the default (soft) memory limit in megabytes.
     ///
     /// The table will try to stay below this limit but may exceed it slightly

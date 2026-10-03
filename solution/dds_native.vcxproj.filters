@@ -147,6 +147,9 @@
     <ClCompile Include="..\library\src\trans_table\trans_table_l.cpp">
       <Filter>library\src\trans_table</Filter>
     </ClCompile>
+    <ClCompile Include="..\library\src\trans_table\trans_table_p.cpp">
+      <Filter>library\src\trans_table</Filter>
+    </ClCompile>
     <ClCompile Include="..\library\src\trans_table\trans_table_s.cpp">
       <Filter>library\src\trans_table</Filter>
     </ClCompile>
@@ -282,6 +285,9 @@
       <Filter>library\src\trans_table</Filter>
     </ClInclude>
     <ClInclude Include="..\library\src\trans_table\trans_table_l.hpp">
+      <Filter>library\src\trans_table</Filter>
+    </ClInclude>
+    <ClInclude Include="..\library\src\trans_table\trans_table_p.hpp">
       <Filter>library\src\trans_table</Filter>
     </ClInclude>
     <ClInclude Include="..\library\src\trans_table\trans_table_s.hpp">

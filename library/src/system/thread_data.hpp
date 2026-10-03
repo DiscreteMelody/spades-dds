@@ -68,6 +68,13 @@ struct ThreadData
   // kept apart from the broken-trump ones.
   bool ttUnbrokenOn = true;
 
+  // Exact search features (SetSearchFeatures(), DDS_FEATURE_* bits). Copied
+  // from the process-wide setting at the start of solve_board_internal(),
+  // so one solve sees one value. Each bit is a control arm: switching it
+  // off restores the earlier search for that feature, and no bit changes a
+  // result.
+  int features = 0;
+
   // Parity (hand & 1) of the reference side - the partnership containing
   // whichever hand is on play at the start of the solve - fixed for the
   // whole solve regardless of misereOn. Used by

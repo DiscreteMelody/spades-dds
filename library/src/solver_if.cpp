@@ -86,6 +86,24 @@ int STDCALL GetUnbrokenTrumpTable()
 }
 
 
+// Process-wide exact search features (DDS_FEATURE_* in dll.h). Every bit is
+// a control arm for one exactness-preserving optimisation; results never
+// depend on the setting, only the search effort does.
+static std::atomic<int> g_search_features{DDS_FEATURE_DEFAULT};
+
+void STDCALL SetSearchFeatures(
+  int flags)
+{
+  g_search_features.store(flags & DDS_FEATURE_ALL, std::memory_order_relaxed);
+}
+
+
+int STDCALL GetSearchFeatures()
+{
+  return g_search_features.load(std::memory_order_relaxed);
+}
+
+
 int STDCALL SolveBoard(
   Deal dl,
   int target,
@@ -177,6 +195,7 @@ auto solve_board_internal(
   thrp->trumpBreakRuleOn = (dl.enforceTrumpBreak != 0);
   thrp->misereOn = (dl.misere != 0);
   thrp->ttUnbrokenOn = g_unbroken_trump_table.load(std::memory_order_relaxed);
+  thrp->features = g_search_features.load(std::memory_order_relaxed);
   ctx.search().ini_depth() = cardCount - 4;
   int ini_depth = ctx.search().ini_depth();
   int trick = (ini_depth + 3) >> 2;
@@ -457,6 +476,21 @@ auto solve_board_internal(
     int lowerbound = 0;
     futp->cards = noMoves;
 
+    // DDS_FEATURE_CLAMP_GUESS: no target above the tricks left (trick + 1)
+    // can be reached, so start there at most. A maximising hand to play
+    // also takes the ceiling as its upper bound, which saves the probe that
+    // would only confirm it. A minimising one keeps 13: it records its card
+    // on the failing probe, and the all-tied fill below must stay reserved
+    // for the case where every probe succeeded.
+    if (thrp->features & DDS_FEATURE_CLAMP_GUESS)
+    {
+      const int ceiling = trick + 1;
+      if (guess > ceiling)
+        guess = ceiling;
+      if (handToPlayIsMax)
+        upperbound = ceiling;
+    }
+
     for (int mno = 0; mno < noMoves; mno++)
     {
       // The carried-over `upperbound` from the previous candidate is a
@@ -555,6 +589,20 @@ auto solve_board_internal(
 
         guess = lowerbound;
         lowerbound = 0;
+
+        // DDS_FEATURE_MISERE_LB_CARRY: under misère the cards are found
+        // lowest score first, so every card still allowed scores at least
+        // this one. Keep that as a proven lower bound and start one above
+        // it, instead of re-proving it with the first probe. The ceiling
+        // (13) is left to the old path so the all-tied fill below happens
+        // exactly as before.
+        if (thrp->misereOn &&
+            (thrp->features & DDS_FEATURE_MISERE_LB_CARRY) &&
+            futp->score[mno] < 13)
+        {
+          lowerbound = futp->score[mno];
+          guess = lowerbound + 1;
+        }
       }
       else
       {
@@ -624,6 +672,16 @@ auto solve_board_internal(
     int guess = 7 - (handToPlay & 0x1);
     int upperbound = 13;
     int lowerbound = 0;
+
+    // DDS_FEATURE_CLAMP_GUESS: see the solutions == 3 block above.
+    if (thrp->features & DDS_FEATURE_CLAMP_GUESS)
+    {
+      const int ceiling = trick + 1;
+      if (guess > ceiling)
+        guess = ceiling;
+      if (handToPlayIsMax)
+        upperbound = ceiling;
+    }
 
     // See the equivalent tracking (and the two capture-site comments) in
     // the solutions==3 block above: mvCaptured is the direct signal for
@@ -809,10 +867,21 @@ auto solve_board_internal(
 
   /* No per-iteration full reset here; preserve original behavior */
 
+    // The probe that finds another card tied with score[0]. When score[0] is
+    // the exact optimum (target == -1), a tie is "reaches score[0]" for a
+    // hand that maximises and "stays below score[0] + 1" for one that
+    // minimises (misère); either way the probe succeeds for the hand to play
+    // exactly when a remaining card ties, and its cutoff records that card in
+    // best_move. Probing misère at score[0] instead (the old code) always
+    // returned true without a cutoff, so only the first card was reported.
+    // With an explicit target the old probe is kept.
+    const int tieTarget =
+      (target == -1 && ! handToPlayIsMax) ? futp->score[0] + 1 : futp->score[0];
+
     TIMER_START(TIMER_NO_AB, ini_depth);
   thrp->val = (* AB_ptr_list[hand_rel_first])(
                   &thrp->lookAheadPos,
-                  futp->score[0],
+                  tieTarget,
                   ini_depth,
           ctx);
     TIMER_END(TIMER_NO_AB, ini_depth);
@@ -822,21 +891,8 @@ auto solve_board_internal(
       thrp, target, -1, -1, 2);
 #endif
 
-    if (! thrp->val)
-      break;
-
-    // NOTE: this loop's job is "find OTHER moves tied at exactly
-    // futp->score[0]". In vanilla mode that's equivalent to ">= score[0]"
-    // because score[0] was already established as the maximum - nothing
-    // can beat it. In misère mode score[0] is the *minimum*, so a move
-    // that merely satisfies ">= score[0]" could be strictly worse (a
-    // higher, non-tied trick count) rather than tied - this loop doesn't
-    // currently distinguish those for misère. It isn't reachable from
-    // SolveBoardPBN with the target/solutions values used elsewhere in
-    // this codebase (this path needs an explicit target >= 1 together
-    // with solutions == 2), so it's flagged rather than fully re-derived
-    // here. Only the best_move read below - a definite bug regardless of
-    // that open question - is fixed.
+    // A tie was found exactly when the probe went the hand to play's way
+    // (see tieTarget above); only then is best_move a real cutoff card.
     if (thrp->val == handToPlayIsMax)
     {
       futp->cards = ind + 1;

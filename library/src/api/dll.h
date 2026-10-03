@@ -629,6 +629,65 @@ EXTERN_C DLLEXPORT auto STDCALL SetUnbrokenTrumpTable(
 EXTERN_C DLLEXPORT auto STDCALL GetUnbrokenTrumpTable() -> int;
 
 /**
+ * @name Exact search features
+ * Bit flags for SetSearchFeatures(). Each bit switches one optimisation of
+ * the search. None of them changes a result: they only change how much of
+ * the tree is searched. Clearing a bit restores the earlier search for that
+ * feature, which is useful as a control arm when measuring.
+ * @{
+ */
+/** solutions=3 under misère: start each later root card from the previous
+ *  card's score as a proven lower bound (cards are found lowest first), so
+ *  the probe that would re-prove it is skipped. */
+#define DDS_FEATURE_MISERE_LB_CARRY 0x1
+/** At trick starts with 6 or more tricks left, test the trivial target
+ *  bounds before the transposition-table lookup. */
+#define DDS_FEATURE_TRIVIAL_FIRST 0x2
+/** Root driver: never start the target search above the number of tricks
+ *  left (mid-game roots). */
+#define DDS_FEATURE_CLAMP_GUESS 0x4
+/** At trick starts, cut on the tricks a side must take however both sides
+ *  play: its longer trump holding minus the opponents' trumps. Holds under
+ *  both objectives and the trump-break rule, and depends on suit lengths
+ *  only. */
+#define DDS_FEATURE_TRUMP_LENGTH 0x8
+/** Maximum-tricks solves: run LaterTricksMIN/MAX at trick starts while
+ *  trump is unbroken under the trump-break rule (QuickTricks stays off
+ *  there). Every LaterTricks argument uses only cards that win when played
+ *  and how hands follow, never a trump lead. */
+#define DDS_FEATURE_LATER_TRICKS_UNBROKEN 0x10
+/** Misère solves: at trick starts, cut on a rank-aware version of the
+ *  trump-length bound: the trumps of one hand that cannot each be matched to
+ *  a distinct higher opponent trump. Backs up every remaining trump, which
+ *  it depends on. Tried after DDS_FEATURE_TRUMP_LENGTH. Not used in
+ *  maximum-tricks solves, where it costs more than it saves. */
+#define DDS_FEATURE_TRUMP_MATCHING 0x20
+/** Every feature bit this build knows about. */
+#define DDS_FEATURE_ALL 0x3f
+/** The setting in force unless changed: every feature. */
+#define DDS_FEATURE_DEFAULT DDS_FEATURE_ALL
+/** @} */
+
+/**
+ * @brief Choose the exact search features used by later solves
+ *        (process-wide).
+ *
+ * @param flags A combination of the DDS_FEATURE_* bits. Unknown bits are
+ *        ignored.
+ *
+ * Read when a solve starts, so set it before solving rather than while other
+ * threads are solving. Results never depend on it.
+ */
+EXTERN_C DLLEXPORT auto STDCALL SetSearchFeatures(
+  int flags) -> void;
+
+/**
+ * @brief The exact search features in force (see SetSearchFeatures).
+ * @return The DDS_FEATURE_* bits.
+ */
+EXTERN_C DLLEXPORT auto STDCALL GetSearchFeatures() -> int;
+
+/**
  * @brief The current misère move-ordering flags (see SetMisereMoveOrdering).
  * @return The DDS_MISERE_ORDER_* flags in force.
  */

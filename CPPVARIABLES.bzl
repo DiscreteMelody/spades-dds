@@ -22,6 +22,7 @@ DDS_CPPOPTS = select({
     ],
     "//:build_linux": [
         "-O3",
+        "-flto=thin",
         "-fPIC",
         "-Wpedantic",
         "-Wall",
@@ -90,7 +91,7 @@ DDS_LOCAL_DEFINES = select({
 DDS_LINKOPTS = select({
     "//:build_macos": ["-flto=thin"],
     "//:debug_build_macos": [],
-    "//:build_linux": [],
+    "//:build_linux": ["-flto=thin"],
     "//:debug_build_linux": [],
     "//conditions:default": [],
 })

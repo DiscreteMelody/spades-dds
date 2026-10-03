@@ -38,7 +38,12 @@
 		<LinkIncremental>true</LinkIncremental>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-		<LinkIncremental>true</LinkIncremental>
+		<!-- Whole-program optimisation (/GL + /LTCG): the search hot path
+		     crosses translation units (ab_search, moves, heuristic sorting,
+		     transposition table). /LTCG and incremental linking exclude
+		     each other. -->
+		<WholeProgramOptimization>true</WholeProgramOptimization>
+		<LinkIncremental>false</LinkIncremental>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
 		<LinkIncremental>true</LinkIncremental>

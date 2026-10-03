@@ -78,6 +78,82 @@ void undo_3(
 const int handDelta[DDS_SUITS] = { 256, 16, 1, 0 };
 
 
+// Tricks the partnership with hand parity `side` must take from this trick
+// start to the end, whatever either side plays (DDS_FEATURE_TRUMP_LENGTH).
+//
+// Let L be the longer trump holding of the side and O the opponents'
+// combined trumps. The long hand plays its L trumps in L different tricks.
+// A trick in which it plays a trump is lost only if an opponent plays a
+// higher trump to it (a card of another suit never beats a trump), and each
+// opponent trump is played to one trick only. So at least L - O of those
+// tricks are won by the side. No assumption is made about how anyone plays,
+// so the bound holds under both objectives and under the trump-break rule.
+// It reads suit lengths only, which the transposition-table key fixes, so a
+// cut needs no relevant ranks.
+static inline int forced_trump_tricks(
+  const Pos * posPoint,
+  const int trump,
+  const int side)
+{
+  const int a = posPoint->length[side][trump];
+  const int b = posPoint->length[side + 2][trump];
+  const int o = posPoint->length[side ^ 1][trump] +
+                posPoint->length[(side ^ 1) + 2][trump];
+  const int l = (a > b ? a : b);
+  return (l > o ? l - o : 0);
+}
+
+// Rank-aware version of forced_trump_tricks (DDS_FEATURE_TRUMP_MATCHING).
+//
+// Take one hand of the side and its trumps. In a trick where that hand
+// plays a trump, the side loses the trick only if an opponent plays a
+// higher trump to it, and every opponent trump is played to one trick only.
+// So the tricks the hand's trumps can lose are at most the size of a
+// largest matching of its trumps to distinct higher opponent trumps, and the
+// side takes at least (the hand's trumps - that matching) tricks. The
+// matching is found greedily: opponent trumps in ascending order, each one
+// paired with the lowest still unpaired trump of the hand below it (the
+// sets of trumps a card can beat are nested, so this is a largest
+// matching). The bound is the larger of the two hands' values; it is never
+// below forced_trump_tricks, because the matching has at most O pairs.
+//
+// It depends on the relative order of the remaining trumps, so a cut must
+// back up all of them (see the caller): the transposition-table entries
+// above the cut then only generalise over positions with the same trump
+// owners, where the matching is the same.
+static inline int forced_trump_tricks_matching(
+  const Pos * posPoint,
+  const int trump,
+  const int side)
+{
+  const unsigned opp =
+    static_cast<unsigned>(posPoint->rank_in_suit[side ^ 1][trump]) |
+    static_cast<unsigned>(posPoint->rank_in_suit[(side ^ 1) + 2][trump]);
+  int best = 0;
+  for (int h = side; h < DDS_HANDS; h += 2)
+  {
+    unsigned mine = posPoint->rank_in_suit[h][trump];
+    const int count = posPoint->length[h][trump];
+    int matched = 0;
+    unsigned o = opp;
+    while (o && mine)
+    {
+      const unsigned ob = o & (0u - o);
+      o ^= ob;
+      const unsigned below = mine & (ob - 1u);
+      if (below)
+      {
+        mine ^= below & (0u - below);
+        matched++;
+      }
+    }
+    if (count - matched > best)
+      best = count - matched;
+  }
+  return best;
+}
+
+
 bool ab_search(
   Pos * posPoint,
   const int target,
@@ -291,6 +367,21 @@ static bool ab_search_0_ctx(
   for (int ss = 0; ss < DDS_SUITS; ss++)
     posPoint->win_ranks[depth][ss] = 0;
 
+  // DDS_FEATURE_TRIVIAL_FIRST: a node the trivial target test decides needs
+  // no lookup (a miss can also allocate or evict a block), and the trivial
+  // cut backs up no ranks. The same tests stay below for the default order.
+  if (thrp->features & DDS_FEATURE_TRIVIAL_FIRST)
+  {
+    if (posPoint->tricks_max >= target)
+    {
+      return true;
+    }
+    if (posPoint->tricks_max + tricks + 1 < target)
+    {
+      return false;
+    }
+  }
+
   if (depth >= 20 && ttUsable)
   {
     /* Find node that fits the suit lengths */
@@ -343,7 +434,45 @@ static bool ab_search_0_ctx(
     AB_COUNT(AB_TARGET_REACHED, false, depth);
     return false;
   }
-  else if (depth == 0) /* Maximum depth? */
+
+  // DDS_FEATURE_TRUMP_LENGTH: the trivial test with each side's forced
+  // trump tricks added (see forced_trump_tricks). Backs up no ranks.
+  if ((thrp->features & DDS_FEATURE_TRUMP_LENGTH) && trump != DDS_NOTRUMP)
+  {
+    const int ref = thrp->scoreParity;
+    const int fRef = forced_trump_tricks(posPoint, trump, ref);
+    const int fOpp = forced_trump_tricks(posPoint, trump, ref ^ 1);
+    if (posPoint->tricks_max + fRef >= target)
+    {
+      return true;
+    }
+    if (posPoint->tricks_max + tricks + 1 - fOpp < target)
+    {
+      return false;
+    }
+  }
+
+  // DDS_FEATURE_TRUMP_MATCHING: the same test with the rank-aware count
+  // (see forced_trump_tricks_matching). It depends on the order of the
+  // remaining trumps, so every one of them is backed up.
+  // Misère only: in maximum-tricks solves the backed-up trumps cost more in
+  // transposition-table generality than the extra cuts save (measured +14%
+  // nodes on 13-card deals, against -23% under misère).
+  if ((thrp->features & DDS_FEATURE_TRUMP_MATCHING) && thrp->misereOn &&
+      trump != DDS_NOTRUMP)
+  {
+    const int ref = thrp->scoreParity;
+    const int fRef = forced_trump_tricks_matching(posPoint, trump, ref);
+    const int fOpp = forced_trump_tricks_matching(posPoint, trump, ref ^ 1);
+    if (posPoint->tricks_max + fRef >= target ||
+        posPoint->tricks_max + tricks + 1 - fOpp < target)
+    {
+      posPoint->win_ranks[depth][trump] = posPoint->aggr[trump];
+      return (posPoint->tricks_max + fRef >= target);
+    }
+  }
+
+  if (depth == 0) /* Maximum depth? */
   {
     TIMER_START(TIMER_NO_EVALUATE, depth);
     EvalType evalData = evaluate_with_context(posPoint, trump, ctx);
@@ -411,6 +540,40 @@ static bool ab_search_0_ctx(
       return true;
     }
   }
+  }
+  else if (! thrp->misereOn &&
+           (thrp->features & DDS_FEATURE_LATER_TRICKS_UNBROKEN))
+  {
+    // Trump is unbroken under the rule (quickTricksUsable is false only for
+    // that reason outside misère), and QuickTricks, which may cash or lead
+    // trumps, stays off. LaterTricks stays valid. Each of its branches is
+    // one of:
+    //  - the other side holds every trump: each trump of its longer trump
+    //    hand wins the trick it is played to;
+    //  - the other side holds the top trump, which wins whenever played;
+    //  - the top two trumps, one of them with a spare trump beside it, so
+    //    they can always be played to different tricks;
+    //  - the second trump with a spare, sitting over the top trump, or the
+    //    second and third trumps against the top one;
+    //  - no trump left at all, where the rule restricts nothing.
+    // None of them needs anybody to lead a trump. The rule only removes
+    // leads: the side on lead here can only do less, and the bounded side
+    // leads only after it has won a trick. A hand that holds nothing but
+    // trumps may lead them anyway, which every argument already allows.
+    if (ctx.search().node_type_store(hand) == MAXNODE)
+    {
+      if (! LaterTricksMIN(* posPoint, hand, depth, target, trump, ctx))
+      {
+        return false;
+      }
+    }
+    else
+    {
+      if (LaterTricksMAX(* posPoint, hand, depth, target, trump, ctx))
+      {
+        return true;
+      }
+    }
   }
 
   if (depth < 20 && ttUsable)
